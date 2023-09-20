@@ -4,9 +4,15 @@ import xmlrpc.server
 
 serverId = 0
 basePort = 9000
+kvStore = dict()
+writeCtr = 0 # most recent writeId that we've seen; used to check for gaps
 
 class KVSRPCServer:
-    def put(self, key, value):
+
+    # if receiving a sequential writeId, commit immediately
+    # otherwise just drop msg and tell frontend of discrepancy to receive log
+    # then execute log in order
+    def put(self, key, value, writeId):
         return "[Server " + str(serverId) + "] Receive a put request: " + "Key = " + str(key) + ", Val = " + str(value)
 
     def get(self, key):
