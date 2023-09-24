@@ -1,7 +1,9 @@
+import threading
 import xmlrpc.client
 import xmlrpc.server
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 serverTimestamps = dict()
 kvsServers = dict()
@@ -14,18 +16,42 @@ class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
 
 class FrontendRPCServer:
     # full write
+
+    def putListen(proxy, command):
+        try:
+            proxy = xmlrpc.client.ServerProxy("address of server", timeout=threshold)
+
+            response = proxy.execute_command()
+        except xmlrpc.client.Fault as e:
+            print("frontend fault is: ", e)
+        except Exception as e:
+            print("exception is: ", e)
+        
+
     def put(self, key, value):
         # serverId = key % len(kvsServers)
 
-        # spawn one put thread per server, block til all ACK or timeout
+        # spawn one put thread per server, block til all servers ACK or timeout
         # lock key and add to list of server : key
-        serverId = currServer
-        returnVal = kvsServers[serverId].put(key, value, writeId)
+
+        # how do we submit this command to multiple servers?
+        # remember that you can only listen on a port once--so we have this thread listen on a port and then spawn other threads as needed
+
+
+        with ThreadPoolExecutor() as executor:
+            commands = {executor.submit(server.put) for _ in range(len(kvsServers))}
+            for future in as_completed(commands):
+                response = future.result()
+
+        # serverId = 
+        # returnVal = kvsServers[serverId].put(key, value, writeId)
 
         # if timeout and heartbeat not recorded in a while, declare dead
         # remember that timeout should be pretty long
+        # if now - timeout > threshold and now - heartbeat > threshold: dead
 
         # if any server says they have gaps: send log and wait for ACK
+        # if 
 
         # if all ACKs: success, unlock keys and return to client
 
