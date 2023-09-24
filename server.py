@@ -32,7 +32,7 @@ class KVSRPCServer:
 
     def get(self, key):
         # return in format k:v
-        return key + ":" + kvStore.get(key, keyDNE)
+        return str(key) + ":" + str(kvStore.get(key, keyDNE))
         # return "[Server " + str(serverId) + "] Receive a get request: " + "Key = " + str(key)
 
     def printKVPairs(self):
