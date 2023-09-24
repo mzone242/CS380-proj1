@@ -1,4 +1,4 @@
-FROM sekwonlee/kvs:base
+FROM mzone242/raft:base
 
 MAINTAINER Sekwon Lee <sklee@cs.utexas.edu> version: 0.1
 

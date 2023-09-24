@@ -26,36 +26,41 @@ class FrontendRPCServer:
             print("frontend fault is: ", e)
         except Exception as e:
             print("exception is: ", e)
-        
+
+    
 
     def put(self, key, value):
-        # serverId = key % len(kvsServers)
+        serverId = key % len(kvsServers)
+        return kvsServers[serverId].put(key, value)
+        
+    # def put(self, key, value):
+    #     serverId = key % len(kvsServers)
 
-        # spawn one put thread per server, block til all servers ACK or timeout
-        # lock key and add to list of server : key
+    #     # spawn one put thread per server, block til all servers ACK or timeout
+    #     # lock key and add to list of server : key
 
-        # how do we submit this command to multiple servers?
-        # remember that you can only listen on a port once--so we have this thread listen on a port and then spawn other threads as needed
+    #     # how do we submit this command to multiple servers?
+    #     # remember that you can only listen on a port once--so we have this thread listen on a port and then spawn other threads as needed
 
 
-        with ThreadPoolExecutor() as executor:
-            commands = {executor.submit(server.put) for _ in range(len(kvsServers))}
-            for future in as_completed(commands):
-                response = future.result()
+    #     # with ThreadPoolExecutor() as executor:
+    #     #     commands = {executor.submit(server.put) for _ in range(len(kvsServers))}
+    #     #     for future in as_completed(commands):
+    #     #         response = future.result()
 
-        # serverId = 
-        # returnVal = kvsServers[serverId].put(key, value, writeId)
+    #     # serverId = 
+    #     returnVal = kvsServers[serverId].put(key, value, writeId)
 
-        # if timeout and heartbeat not recorded in a while, declare dead
-        # remember that timeout should be pretty long
-        # if now - timeout > threshold and now - heartbeat > threshold: dead
+    #     # if timeout and heartbeat not recorded in a while, declare dead
+    #     # remember that timeout should be pretty long
+    #     # if now - timeout > threshold and now - heartbeat > threshold: dead
 
-        # if any server says they have gaps: send log and wait for ACK
-        # if 
+    #     # if any server says they have gaps: send log and wait for ACK
+    #     # if 
 
-        # if all ACKs: success, unlock keys and return to client
+    #     # if all ACKs: success, unlock keys and return to client
 
-        return returnVal
+    #     return returnVal
 
     # read
     def get(self, key):

@@ -1,11 +1,18 @@
 import argparse
 import xmlrpc.client
 import xmlrpc.server
+from socketserver import ThreadingMixIn
+from xmlrpc.server import SimpleXMLRPCServer
 
 serverId = 0
 basePort = 9000
+
 kvStore = dict()
+keyDNE = "ERR_KEY"
 writeCtr = 0 # most recent writeId that we've seen; used to check for gaps
+
+class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
+        pass
 
 class KVSRPCServer:
 
@@ -13,16 +20,31 @@ class KVSRPCServer:
     # otherwise just drop msg and tell frontend of discrepancy to receive log
     # then execute log in order
     def put(self, key, value, writeId):
-        return "[Server " + str(serverId) + "] Receive a put request: " + "Key = " + str(key) + ", Val = " + str(value)
+        if writeID == writeCtr + 1:
+            kvStore[key] = value
+            return "On it boss"
+            # return "[Server " + str(serverId) + "] Receive a put request: " + "Key = " + str(key) + ", Val = " + str(value)
+        else:
+            # need to alert frontend to send 
+            return "Need writeId" + str(writeCtr + 1)
 
     def get(self, key):
-        return "[Server " + str(serverId) + "] Receive a get request: " + "Key = " + str(key)
+        # return in format k:v
+        return key + ":" + kvStore.get(key, keyDNE)
+        # return "[Server " + str(serverId) + "] Receive a get request: " + "Key = " + str(key)
 
     def printKVPairs(self):
-        return "[Server " + str(serverId) + "] Receive a request printing all KV pairs stored in this server"
+        # return in format k1:v1, k2:v2, k3:v3, ...
+        return "".join("{}:{}, ".format(k, v) for k, v in kvStore.items())[:-2]
+        # return "[Server " + str(serverId) + "] Receive a request printing all KV pairs stored in this server"
 
     def shutdownServer(self):
-        return "[Server " + str(serverId) + "] Receive a request for a normal shutdown"
+        # clean up threads?
+        self.server.shutdown()
+        # return "[Server " + str(serverId) + "] Receive a request for a normal shutdown"
+
+    def heartbeat(self):
+        return "Alive"
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '''To be added.''')
@@ -34,7 +56,12 @@ if __name__ == '__main__':
 
     serverId = args.serverId[0]
 
-    server = xmlrpc.server.SimpleXMLRPCServer(("localhost", basePort + serverId))
+    server = SimpleThreadedXMLRPCServer(("localhost", basePort + serverId))
     server.register_instance(KVSRPCServer())
 
     server.serve_forever()
+
+    # server = xmlrpc.server.SimpleXMLRPCServer(("localhost", basePort + serverId))
+    # server.register_instance(KVSRPCServer())
+
+    # server.serve_forever()
