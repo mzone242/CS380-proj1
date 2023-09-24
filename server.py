@@ -19,7 +19,7 @@ class KVSRPCServer:
     # if receiving a sequential writeId, commit immediately
     # otherwise just drop msg and tell frontend of discrepancy to receive log
     # then execute log in order
-    def put(self, key, value, writeId):
+    def put(self, key, value, writeId=1):
         if writeID == writeCtr + 1:
             kvStore[key] = value
             return "On it boss"
