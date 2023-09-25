@@ -140,9 +140,9 @@ class FrontendRPCServer:
                 except Exception as e:
                     print("Server %d timeout on get, removing." % serverId)
                     kvsServers.pop(serverId)
-
+        return str(lockedServerKeyPairs)
         ## boilerplate code below
-        # serverId = key % len(kvsServers)
+        # serverId = keye, "Timeout on log send." % len(kvsServers)
         # return kvsServers[serverId].get(key)
 
     ## printKVPairs: This function routes requests to servers
