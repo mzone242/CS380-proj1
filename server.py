@@ -1,7 +1,6 @@
 import argparse
 import xmlrpc.client
 import xmlrpc.server
-from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 
 serverId = 0
@@ -14,7 +13,16 @@ writeCtr = 0 # most recent writeId that we've seen; used to check for gaps
 # class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
 #         pass
 
-class KVSRPCServer:
+class KVSRPCServer():
+    quit = False
+
+    def __init__(self, port):
+        self.server = SimpleXMLRPCServer(("localhost", port))
+        self.server.register_instance(self)
+        while not self.quit:
+            self.server.handle_request()
+        exit()
+
 
     # if receiving a sequential writeId, commit immediately
     # otherwise just drop msg and tell frontend of discrepancy to receive log
@@ -42,7 +50,8 @@ class KVSRPCServer:
 
     def shutdownServer(self):
         # clean up threads?
-        self.server.shutdown()
+        quit = True
+        return "[Server " + str(serverId) + "] Shutting down"
         # return "[Server " + str(serverId) + "] Receive a request for a normal shutdown"
 
     def heartbeat(self):
@@ -58,12 +67,9 @@ if __name__ == '__main__':
 
     serverId = args.serverId[0]
 
-    # server = SimpleThreadedXMLRPCServer(("localhost", basePort + serverId))
+    KVSRPCServer(basePort + serverId)
+
+    # server = xmlrpc.server.SimpleXMLRPCServer(("localhost", basePort + serverId))
     # server.register_instance(KVSRPCServer())
 
     # server.serve_forever()
-
-    server = xmlrpc.server.SimpleXMLRPCServer(("localhost", basePort + serverId))
-    server.register_instance(KVSRPCServer())
-
-    server.serve_forever()
