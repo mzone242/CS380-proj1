@@ -5,62 +5,125 @@ from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+lockedServerKeyPairs = set()
+log = [] # tuple of (writeId, key, value)
 serverTimestamps = dict()
 kvsServers = dict()
 baseAddr = "http://localhost:"
 baseServerPort = 9000
 writeId = 0
 
+class TimeoutTransport(xmlrpc.client.Transport):
+
+    def __init__(self, timeout, use_datetime=0):
+        self.timeout = timeout
+        xmlrpc.client.Transport.__init__(self, use_datetime)
+
+    def make_connection(self, host):
+        connection = xmlrpc.client.Transport.make_connection(self, host)
+        connection.timeout = self.timeout
+        return connection
+
+class TimeoutServerProxy(xmlrpc.client.ServerProxy):
+
+    def __init__(self, uri, timeout=5, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
+        t = TimeoutTransport(timeout)
+        xmlrpc.client.ServerProxy.__init__(self, uri, t, encoding, verbose, allow_none, use_datetime)
+
 class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
         pass
 
 class FrontendRPCServer:
     # full write
-
-    def putListen(proxy, command):
-        try:
-            proxy = xmlrpc.client.ServerProxy("address of server", timeout=threshold)
-
-            response = proxy.execute_command()
-        except xmlrpc.client.Fault as e:
-            print("frontend fault is: ", e)
-        except Exception as e:
-            print("exception is: ", e)
-        
-
     def put(self, key, value):
+        # threads = []
+        # for serverId, server in kvsServers.items():
+        #     thread = threading.Thread(target = putListen, args = (baseAddr + str(baseServerPort + serverId), (key, value)))
+        #     threads.append(thread)
+        #     thread.start()
+
+        # for t in threads:
+        #     t.join()
+
+        def sendPut(serverId, key, value, writeId):
+            try:
+                lockedServerKeyPairs.add((serverId, key))
+                proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                response = proxy.put(key, value, writeId)
+                # proxy = xmlrpc.client.ServerProxy("address of server", timeout=threshold)
+            except xmlrpc.client.Fault as e:
+                raise Exception(serverId, e, "Frontend failed on put.")
+            except Exception as e:
+                # declare dead
+                raise Exception(serverId, e, "Timeout on put.")
+            return (serverId, response)
         # serverId = key % len(kvsServers)
+
+        def sendLog(serverId):
+            try:
+                proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                # TODO: add this function to server
+                response = proxy.processLog(log)
+            except xmlrpc.client.Fault as e:
+                raise Exception(serverId, e, "Frontend failed on log send.")
+            except Exception as e:
+                # declare dead
+                raise Exception(serverId, e, "Timeout on log send.")
+            return (serverId, response)
 
         # spawn one put thread per server, block til all servers ACK or timeout
         # lock key and add to list of server : key
-
-        # how do we submit this command to multiple servers?
-        # remember that you can only listen on a port once--so we have this thread listen on a port and then spawn other threads as needed
-
-
+        results = dict()
+        writeId += 1
+        log.append((writeId, key, value))
         with ThreadPoolExecutor() as executor:
-            commands = {executor.submit(server.put) for _ in range(len(kvsServers))}
-            for future in as_completed(commands):
-                response = future.result()
-
-        # serverId = 
-        # returnVal = kvsServers[serverId].put(key, value, writeId)
-
-        # if timeout and heartbeat not recorded in a while, declare dead
-        # remember that timeout should be pretty long
-        # if now - timeout > threshold and now - heartbeat > threshold: dead
+            try:
+                commands = {executor.submit(sendPut, serverId, key, value, writeId) for serverId, _ in kvsServers.items()}
+                for future in as_completed(commands):
+                    serverId, response = future.result()
+                    results[serverId] = response
+            # if timeout and heartbeat not recorded in a while, declare dead
+            except Exception as e:
+                serverId, exception, msg = e
+                if str(msg) == "Timeout on put.":
+                    print("Server %d timeout on put, removing." % serverId)
+                    lockedServerKeyPairs.remove((serverId, key))
+                    kvsServers.pop(serverId)
 
         # if any server says they have gaps: send log and wait for ACK
-        # if 
-
+        with ThreadPoolExecutor() as executor:
+            try:
+                commands = {executor.submit(sendLog, serverId) for serverId, response in results if response == "NACK"}
+            except Exception as e:
+                serverId, exception, msg = e
+                if str(msg) == "Timeout on log send.":
+                    print("Server %d timeout on log send, removing." % serverId)
+                    lockedServerKeyPairs.remove((serverId, key))
+                    kvsServers.pop(serverId)
+                
+        # results now contains only serverIds who have succeeded
         # if all ACKs: success, unlock keys and return to client
+        for serverId, _ in results.items():
+            lockedServerKeyPairs.remove((serverId, key))
 
-        return returnVal
+        return value
 
     # read
     def get(self, key):
-        serverId = key % len(kvsServers)
-        return kvsServers[serverId].get(key)
+        # send read to first server w/ this key unlocked
+        for serverId in list(kvsServers.keys()):
+            if (serverId, key) not in lockedServerKeyPairs:
+                try:
+                    proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                    response = proxy.get(key)
+                    return response
+                except Exception as e:
+                    print("Server %d timeout on get, removing." % serverId)
+                    kvsServers.pop(serverId)
+
+        ## boilerplate code below
+        # serverId = key % len(kvsServers)
+        # return kvsServers[serverId].get(key)
 
     def printKVPairs(self, serverId):
         return kvsServers[serverId].printKVPairs()
