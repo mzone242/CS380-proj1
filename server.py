@@ -27,16 +27,16 @@ class KVSRPCServer():
     # if receiving a sequential writeId, commit immediately
     # otherwise just drop msg and tell frontend of discrepancy to receive log
     # then execute log in order
-    def put(self, key, value): #, writeId):
-        kvStore[key] = value
-        return "On it boss"
-        # if writeID == writeCtr + 1:
-        #     kvStore[key] = value
-        #     return "On it boss"
-        #     # return "[Server " + str(serverId) + "] Receive a put request: " + "Key = " + str(key) + ", Val = " + str(value)
-        # else:
-        #     # need to alert frontend to send 
-        #     return "Need writeId" + str(writeCtr + 1)
+    def put(self, key, value, writeId):
+        # kvStore[key] = value
+        # return "On it boss"
+        if writeID == writeCtr + 1:
+            kvStore[key] = value
+            return "On it boss"
+            # return "[Server " + str(serverId) + "] Receive a put request: " + "Key = " + str(key) + ", Val = " + str(value)
+        else:
+            # need to alert frontend to send 
+            return "NACK"
 
     def get(self, key):
         # return in format k:v
@@ -53,6 +53,12 @@ class KVSRPCServer():
         self.quit = True
         return "[Server " + str(serverId) + "] Shutting down"
         # return "[Server " + str(serverId) + "] Receive a request for a normal shutdown"
+
+    def processLog(self, log):
+        for _, k, v in log:
+            kvStore[k] = v
+        return "You got it boss"
+
 
     def heartbeat(self):
         return "Alive"

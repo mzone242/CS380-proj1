@@ -53,6 +53,7 @@ class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
 class FrontendRPCServer:
     # full write
     def put(self, key, value):
+        global writeId
         # threads = []
         # for serverId, server in kvsServers.items():
         #     thread = threading.Thread(target = putListen, args = (baseAddr + str(baseServerPort + serverId), (key, value)))
@@ -145,6 +146,8 @@ class FrontendRPCServer:
     ## printKVPairs: This function routes requests to servers
     ## matched with the given serverIds.
     def printKVPairs(self, serverId):
+        if serverId not in kvsServers:
+            return "ERR_NOEXIST"
 
         # for server, key in lockedServerKeyPairs:
             # if serverId == server:
@@ -170,6 +173,8 @@ class FrontendRPCServer:
     ## a server matched with the specified serverId to let the corresponding
     ## server terminate normally.
     def shutdownServer(self, serverId):
+        if serverId not in kvsServers:
+            return "ERR_NOEXIST"
         result = kvsServers[serverId].shutdownServer()
         kvsServers.pop(serverId)
         return result
