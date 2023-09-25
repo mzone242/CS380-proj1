@@ -50,7 +50,7 @@ class KVSRPCServer():
 
     def shutdownServer(self):
         # clean up threads?
-        quit = True
+        self.quit = True
         return "[Server " + str(serverId) + "] Shutting down"
         # return "[Server " + str(serverId) + "] Receive a request for a normal shutdown"
 
