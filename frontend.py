@@ -102,22 +102,24 @@ class FrontendRPCServer:
                     results[serverId] = response
             # if timeout and heartbeat not recorded in a while, declare dead
             except Exception as e:
-                serverId, exception, msg = e
-                if str(msg) == "Timeout on put.":
-                    print("Server %d timeout on put, removing." % serverId)
-                    lockedServerKeyPairs.remove((serverId, key))
-                    kvsServers.pop(serverId)
+                print(e)
+                # serverId, exception, msg = e
+                # if str(msg) == "Timeout on put.":
+                #     print("Server %d timeout on put, removing." % serverId)
+                #     lockedServerKeyPairs.remove((serverId, key))
+                #     kvsServers.pop(serverId)
 
         # if any server says they have gaps: send log and wait for ACK
         with ThreadPoolExecutor() as executor:
             try:
                 commands = {executor.submit(sendLog, serverId) for serverId, response in results if response == "NACK"}
             except Exception as e:
-                serverId, exception, msg = e
-                if str(msg) == "Timeout on log send.":
-                    print("Server %d timeout on log send, removing." % serverId)
-                    lockedServerKeyPairs.remove((serverId, key))
-                    kvsServers.pop(serverId)
+                print(e)
+                # serverId, exception, msg = e
+                # if str(msg) == "Timeout on log send.":
+                #     print("Server %d timeout on log send, removing." % serverId)
+                #     lockedServerKeyPairs.remove((serverId, key))
+                #     kvsServers.pop(serverId)
                 
         # results now contains only serverIds who have succeeded
         # if all ACKs: success, unlock keys and return to client
