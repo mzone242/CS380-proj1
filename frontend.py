@@ -126,6 +126,10 @@ class FrontendRPCServer:
         # return kvsServers[serverId].get(key)
 
     def printKVPairs(self, serverId):
+
+        # for server, key in lockedServerKeyPairs:
+            # if serverId == server:
+                
         return kvsServers[serverId].printKVPairs()
 
     def addServer(self, serverId):
@@ -136,6 +140,7 @@ class FrontendRPCServer:
         serverList = []
         for serverId, rpcHandle in kvsServers.items():
             serverList.append(serverId)
+        if not len(serverList): return "ERR_NOSERVERS"
         return serverList
 
     def shutdownServer(self, serverId):
