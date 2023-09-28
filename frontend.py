@@ -5,30 +5,15 @@ from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-lockedServerKeyPairs = set()
+lockedServerKeyPairs = set() # tuple of (serverId, key)
+keysToRead = set() # keys that readers are in line to read: do not write
 log = [] # tuple of (writeId, key, value)
 serverTimestamps = dict()
 kvsServers = dict()
 baseAddr = "http://localhost:"
 baseServerPort = 9000
 writeId = 0
-
-class TimeoutTransport(xmlrpc.client.Transport):
-
-    def __init__(self, timeout, use_datetime=0):
-        self.timeout = timeout
-        xmlrpc.client.Transport.__init__(self, use_datetime)
-
-    def make_connection(self, host):
-        connection = xmlrpc.client.Transport.make_connection(self, host)
-        connection.timeout = self.timeout
-        return connection
-
-class TimeoutServerProxy(xmlrpc.client.ServerProxy):
-
-    def __init__(self, uri, timeout=5, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
-        t = TimeoutTransport(timeout)
-        xmlrpc.client.ServerProxy.__init__(self, uri, t, encoding, verbose, allow_none, use_datetime)
+opId = 0
 
 class TimeoutTransport(xmlrpc.client.Transport):
 
@@ -53,7 +38,7 @@ class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
 class FrontendRPCServer:
     # full write
     def put(self, key, value):
-        global writeId
+        global writeId, opId
 
         '''first attempt using threading below, don't comment in'''
         # threads = []
@@ -93,6 +78,7 @@ class FrontendRPCServer:
         # lock key and add to list of server : key
         results = dict()
         writeId += 1
+        opId += 1
         log.append((writeId, key, value))
         with ThreadPoolExecutor() as executor:
             try:
@@ -130,17 +116,22 @@ class FrontendRPCServer:
 
     # read
     def get(self, key):
+        global opId
+        
         # send read to first server w/ this key unlocked
+        response = ""
         for serverId in list(kvsServers.keys()):
             if (serverId, key) not in lockedServerKeyPairs:
                 try:
                     proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                     response = proxy.get(key)
-                    return response
+                    if response != "ERR_KEY":
+                        return response
                 except Exception as e:
                     print("Server %d timeout on get, removing." % serverId)
                     kvsServers.pop(serverId)
-        return str(lockedServerKeyPairs)
+        
+        return "ERR_KEY"
     
         ''' boilerplate code below'''
         # serverId = key, "Timeout on log send." % len(kvsServers)

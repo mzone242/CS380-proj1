@@ -30,7 +30,7 @@ class KVSRPCServer():
     def put(self, key, value, writeId):
         # kvStore[key] = value
         # return "On it boss"
-        if writeID == writeCtr + 1:
+        if writeId == writeCtr + 1:
             kvStore[key] = value
             return "On it boss"
             # return "[Server " + str(serverId) + "] Receive a put request: " + "Key = " + str(key) + ", Val = " + str(value)
@@ -55,8 +55,11 @@ class KVSRPCServer():
         # return "[Server " + str(serverId) + "] Receive a request for a normal shutdown"
 
     def processLog(self, log):
+        global writeCtr
         for _, k, v in log:
             kvStore[k] = v
+        # updating our writeID
+        writeCtr = log[-1][0]
         return "You got it boss"
 
 
