@@ -45,7 +45,7 @@ class KVSRPCServer():
 
     def printKVPairs(self):
         # return in format k1:v1, k2:v2, k3:v3, ...
-        return "".join("{}:{}, ".format(k, v) for k, v in kvStore.items())[:-2]
+        return "".join("{}:{}\n".format(k, v) for k, v in kvStore.items())[:-2]
         # return "[Server " + str(serverId) + "] Receive a request printing all KV pairs stored in this server"
 
     def shutdownServer(self):
@@ -64,7 +64,7 @@ class KVSRPCServer():
 
 
     def heartbeat(self):
-        return "Alive"
+        return 1
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '''To be added.''')
