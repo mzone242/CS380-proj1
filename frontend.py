@@ -54,11 +54,9 @@ class FrontendRPCServer:
     # full write
     def put(self, key, value):
         global writeId
-
-        '''first attempt using threading below, don't comment in'''
         # threads = []
         # for serverId, server in kvsServers.items():
-        #     thread = threading.Thread(target = sendPut, args = (baseAddr + str(baseServerPort + serverId), (key, value)))
+        #     thread = threading.Thread(target = putListen, args = (baseAddr + str(baseServerPort + serverId), (key, value)))
         #     threads.append(thread)
         #     thread.start()
 
@@ -70,12 +68,14 @@ class FrontendRPCServer:
                 lockedServerKeyPairs.add((serverId, key))
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 response = proxy.put(key, value, writeId)
+                # proxy = xmlrpc.client.ServerProxy("address of server", timeout=threshold)
             except xmlrpc.client.Fault as e:
                 raise Exception(serverId, e, "Frontend failed on put.")
             except Exception as e:
                 # declare dead
                 raise Exception(serverId, e, "Timeout on put.")
             return (serverId, response)
+        # serverId = key % len(kvsServers)
 
         def sendLog(serverId):
             try:
@@ -103,11 +103,11 @@ class FrontendRPCServer:
             # if timeout and heartbeat not recorded in a while, declare dead
             except Exception as e:
                 print(e)
-                serverId, exception, msg = e.args
-                if str(msg) == "Timeout on put.":
-                    print("Server %d timeout on put, removing." % serverId)
-                    lockedServerKeyPairs.remove((serverId, key))
-                    kvsServers.pop(serverId)
+                # serverId, exception, msg = e
+                # if str(msg) == "Timeout on put.":
+                #     print("Server %d timeout on put, removing." % serverId)
+                #     lockedServerKeyPairs.remove((serverId, key))
+                #     kvsServers.pop(serverId)
 
         # if any server says they have gaps: send log and wait for ACK
         with ThreadPoolExecutor() as executor:
@@ -115,11 +115,11 @@ class FrontendRPCServer:
                 commands = {executor.submit(sendLog, serverId) for serverId, response in results if response == "NACK"}
             except Exception as e:
                 print(e)
-                serverId, exception, msg = e.args
-                if str(msg) == "Timeout on log send.":
-                    print("Server %d timeout on log send, removing." % serverId)
-                    lockedServerKeyPairs.remove((serverId, key))
-                    kvsServers.pop(serverId)
+                # serverId, exception, msg = e
+                # if str(msg) == "Timeout on log send.":
+                #     print("Server %d timeout on log send, removing." % serverId)
+                #     lockedServerKeyPairs.remove((serverId, key))
+                #     kvsServers.pop(serverId)
                 
         # results now contains only serverIds who have succeeded
         # if all ACKs: success, unlock keys and return to client
@@ -140,10 +140,9 @@ class FrontendRPCServer:
                 except Exception as e:
                     print("Server %d timeout on get, removing." % serverId)
                     kvsServers.pop(serverId)
-        return str(lockedServerKeyPairs)
-    
-        ''' boilerplate code below'''
-        # serverId = key, "Timeout on log send." % len(kvsServers)
+
+        ## boilerplate code below
+        # serverId = key % len(kvsServers)
         # return kvsServers[serverId].get(key)
 
     ## printKVPairs: This function routes requests to servers
