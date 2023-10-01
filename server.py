@@ -28,10 +28,12 @@ class KVSRPCServer():
     # otherwise just drop msg and tell frontend of discrepancy to receive log
     # then execute log in order
     def put(self, key, value, writeId):
+        global writeCtr
         # kvStore[key] = value
         # return "On it boss"
         if writeId == writeCtr + 1:
             kvStore[key] = value
+            writeCtr += 1
             return "On it boss"
             # return "[Server " + str(serverId) + "] Receive a put request: " + "Key = " + str(key) + ", Val = " + str(value)
         else:
