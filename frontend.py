@@ -126,7 +126,7 @@ class FrontendRPCServer:
         for serverId, _ in results.items():
             lockedServerKeyPairs.remove((serverId, key))
 
-        return value
+        return results
 
     # read
     def get(self, key):
