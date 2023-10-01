@@ -55,8 +55,8 @@ class FrontendRPCServer:
                 lockedServerKeyPairs.add((serverId, key))
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 response = proxy.put(key, value, writeId)
-            except xmlrpc.client.Fault as e:
-                raise Exception(serverId, e, "Frontend failed on put.")
+            # except xmlrpc.client.Fault as e:
+            #     raise Exception(serverId, e, "Frontend failed on put.")
             except Exception as e:
                 # declare dead
                 raise Exception(serverId, e, "Timeout on put.")
@@ -67,8 +67,8 @@ class FrontendRPCServer:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 # TODO: add this function to server
                 response = proxy.processLog(log)
-            except xmlrpc.client.Fault as e:
-                raise Exception(serverId, e, "Frontend failed on log send.")
+            # except xmlrpc.client.Fault as e:
+            #     raise Exception(serverId, e, "Frontend failed on log send.")
             except Exception as e:
                 # declare dead
                 raise Exception(serverId, e, "Timeout on log send.")
