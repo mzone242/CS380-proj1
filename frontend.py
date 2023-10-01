@@ -5,15 +5,13 @@ from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-lockedServerKeyPairs = set() # tuple of (serverId, key)
-keysToRead = set() # keys that readers are in line to read: do not write
+lockedServerKeyPairs = set()
 log = [] # tuple of (writeId, key, value)
 serverTimestamps = dict()
 kvsServers = dict()
 baseAddr = "http://localhost:"
 baseServerPort = 9000
 writeId = 0
-opId = 0
 
 class TimeoutTransport(xmlrpc.client.Transport):
 
@@ -38,12 +36,9 @@ class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
 class FrontendRPCServer:
     # full write
     def put(self, key, value):
-        global writeId, opId
-
-        '''first attempt using threading below, don't comment in'''
         # threads = []
         # for serverId, server in kvsServers.items():
-        #     thread = threading.Thread(target = sendPut, args = (baseAddr + str(baseServerPort + serverId), (key, value)))
+        #     thread = threading.Thread(target = putListen, args = (baseAddr + str(baseServerPort + serverId), (key, value)))
         #     threads.append(thread)
         #     thread.start()
 
@@ -55,20 +50,22 @@ class FrontendRPCServer:
                 lockedServerKeyPairs.add((serverId, key))
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 response = proxy.put(key, value, writeId)
-            # except xmlrpc.client.Fault as e:
-            #     raise Exception(serverId, e, "Frontend failed on put.")
+                # proxy = xmlrpc.client.ServerProxy("address of server", timeout=threshold)
+            except xmlrpc.client.Fault as e:
+                raise Exception(serverId, e, "Frontend failed on put.")
             except Exception as e:
                 # declare dead
                 raise Exception(serverId, e, "Timeout on put.")
             return (serverId, response)
+        # serverId = key % len(kvsServers)
 
         def sendLog(serverId):
             try:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 # TODO: add this function to server
                 response = proxy.processLog(log)
-            # except xmlrpc.client.Fault as e:
-            #     raise Exception(serverId, e, "Frontend failed on log send.")
+            except xmlrpc.client.Fault as e:
+                raise Exception(serverId, e, "Frontend failed on log send.")
             except Exception as e:
                 # declare dead
                 raise Exception(serverId, e, "Timeout on log send.")
@@ -78,7 +75,6 @@ class FrontendRPCServer:
         # lock key and add to list of server : key
         results = dict()
         writeId += 1
-        opId += 1
         log.append((writeId, key, value))
         with ThreadPoolExecutor() as executor:
             try:
@@ -88,8 +84,7 @@ class FrontendRPCServer:
                     results[serverId] = response
             # if timeout and heartbeat not recorded in a while, declare dead
             except Exception as e:
-                print(e)
-                serverId, exception, msg = e.args
+                serverId, exception, msg = e
                 if str(msg) == "Timeout on put.":
                     print("Server %d timeout on put, removing." % serverId)
                     lockedServerKeyPairs.remove((serverId, key))
@@ -100,8 +95,7 @@ class FrontendRPCServer:
             try:
                 commands = {executor.submit(sendLog, serverId) for serverId, response in results if response == "NACK"}
             except Exception as e:
-                print(e)
-                serverId, exception, msg = e.args
+                serverId, exception, msg = e
                 if str(msg) == "Timeout on log send.":
                     print("Server %d timeout on log send, removing." % serverId)
                     lockedServerKeyPairs.remove((serverId, key))
@@ -116,59 +110,35 @@ class FrontendRPCServer:
 
     # read
     def get(self, key):
-        global opId
-        
         # send read to first server w/ this key unlocked
-        response = ""
         for serverId in list(kvsServers.keys()):
             if (serverId, key) not in lockedServerKeyPairs:
                 try:
                     proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                     response = proxy.get(key)
-                    if response != "ERR_KEY":
-                        return response
+                    return response
                 except Exception as e:
                     print("Server %d timeout on get, removing." % serverId)
                     kvsServers.pop(serverId)
-        
-        return "ERR_KEY"
-    
-        ''' boilerplate code below'''
-        # serverId = key, "Timeout on log send." % len(kvsServers)
+
+        ## boilerplate code below
+        # serverId = key % len(kvsServers)
         # return kvsServers[serverId].get(key)
 
-    ## printKVPairs: This function routes requests to servers
-    ## matched with the given serverIds.
     def printKVPairs(self, serverId):
-        if serverId not in kvsServers:
-            return "ERR_NOEXIST"
-
-        # for server, key in lockedServerKeyPairs:
-            # if serverId == server:
-                
         return kvsServers[serverId].printKVPairs()
 
-    ## addServer: This function registers a new server with the
-    ## serverId to the cluster membership.
     def addServer(self, serverId):
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
         return "Success"
 
-    ## listServer: This function prints out a list of servers that
-    ## are currently active/alive inside the cluster.
     def listServer(self):
         serverList = []
         for serverId, rpcHandle in kvsServers.items():
             serverList.append(serverId)
-        if not len(serverList): return "ERR_NOSERVERS"
         return serverList
 
-    ## shutdownServer: This function routes the shutdown request to
-    ## a server matched with the specified serverId to let the corresponding
-    ## server terminate normally.
     def shutdownServer(self, serverId):
-        if serverId not in kvsServers:
-            return "ERR_NOEXIST"
         result = kvsServers[serverId].shutdownServer()
         kvsServers.pop(serverId)
         return result
