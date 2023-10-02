@@ -47,7 +47,7 @@ class KVSRPCServer():
 
     def printKVPairs(self):
         # return in format k1:v1, k2:v2, k3:v3, ...
-        return "".join("{}:{}\n".format(k, v) for k, v in kvStore.items())
+        return "".join("{}:{}\n".format(k, v) for k, v in kvStore.items())[:-1]
         # return "[Server " + str(serverId) + "] Receive a request printing all KV pairs stored in this server"
 
     def shutdownServer(self):
