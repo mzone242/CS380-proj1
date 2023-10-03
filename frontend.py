@@ -1,17 +1,22 @@
-import threading
+from datetime import datetime
+from threading import Lock
 import xmlrpc.client
 import xmlrpc.server
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-lockedServerKeyPairs = set()
+lockedKeys = set()
+keyLocks = dict()
 log = [] # tuple of (writeId, key, value)
+# timestampLock = Lock()
 serverTimestamps = dict()
 kvsServers = dict()
 baseAddr = "http://localhost:"
 baseServerPort = 9000
 writeId = 0
+writeIdLock = Lock()
+serverLocks = dict()
 
 class TimeoutTransport(xmlrpc.client.Transport):
 
@@ -65,10 +70,11 @@ class FrontendRPCServer:
 
         def sendPut(serverId, key, value, writeId):
             try:
-                lockedServerKeyPairs.add((serverId, key))
+                # lockedKeys.add(key)
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 response = proxy.put(key, value, writeId)
-                # proxy = xmlrpc.client.ServerProxy("address of server", timeout=threshold)
+                if response == "On it, boss":
+                    serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
                 raise Exception(serverId, e, "Frontend failed on put.")
             except Exception as e:
@@ -82,49 +88,59 @@ class FrontendRPCServer:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 # TODO: add this function to server
                 response = proxy.processLog(log)
+                if response == "You got it, boss":
+                    serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
-                raise Exception(serverId, e, "Frontend failed on log send.")
+                # raise Exception(serverId, e, "Frontend failed on log send.")
+                response = "Frontend failed on log send."
             except Exception as e:
                 # declare dead
-                raise Exception(serverId, e, "Timeout on log send.")
+                # raise Exception(serverId, e, "Timeout on log send.")
+                response = "Timeout on log send."
             return (serverId, response)
 
-        # spawn one put thread per server, block til all servers ACK or timeout
-        # lock key and add to list of server : key
-        results = dict()
-        writeId += 1
-        log.append((writeId, key, value))
-        with ThreadPoolExecutor() as executor:
-            try:
+       
+        # check if this key is new: if so, create lock for it
+        if key not in keyLocks.keys():
+            dict[key] = Lock()
+        keyLock = dict[key]
+        with keyLock:
+            # spawn one put thread per server, block til all servers ACK/timeout
+            # lock key and add to list of server : key
+            results = dict()
+            with writeIdLock:
+                writeId += 1
+                thisWriteId, thisKey, thisValue = writeId, key, value
+            log.append((thisWriteId, thisKey, thisValue))
+            with ThreadPoolExecutor() as executor:
                 commands = {executor.submit(sendPut, serverId, key, value, writeId) for serverId, _ in kvsServers.items()}
                 for future in as_completed(commands):
                     serverId, response = future.result()
                     results[serverId] = response
-            # if timeout and heartbeat not recorded in a while, declare dead
-            except Exception as e:
-                print(e)
-                # serverId, exception, msg = e
-                # if str(msg) == "Timeout on put.":
-                #     print("Server %d timeout on put, removing." % serverId)
-                #     lockedServerKeyPairs.remove((serverId, key))
-                #     kvsServers.pop(serverId)
 
-        # if any server says they have gaps: send log and wait for ACK
-        with ThreadPoolExecutor() as executor:
-            try:
-                commands = {executor.submit(sendLog, serverId) for serverId, response in results if response == "NACK"}
-            except Exception as e:
-                print(e)
-                # serverId, exception, msg = e
-                # if str(msg) == "Timeout on log send.":
-                #     print("Server %d timeout on log send, removing." % serverId)
-                #     lockedServerKeyPairs.remove((serverId, key))
-                #     kvsServers.pop(serverId)
-                
-        # results now contains only serverIds who have succeeded
-        # if all ACKs: success, unlock keys and return to client
-        for serverId, _ in results.items():
-            lockedServerKeyPairs.remove((serverId, key))
+            # if timeout on put and heartbeat not recorded in a while, it's dead
+            for serverId, response in results:
+                if response == "Frontend failed on put.":
+                    print(response + " Time to panic.")
+                elif response == "Timeout on put." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
+                    print(response + " No heartbeat in the past 5 seconds. Removing serverId "+str(serverId)+" from list.")                    
+
+            # if any server says they have gaps: send log and wait for ACK
+            with ThreadPoolExecutor() as executor:
+                commands = {executor.submit(sendLog, serverId) for serverId, response in results if response == "No can do boss"}
+                for future in as_completed(commands):
+                    serverId, response = future.result()
+                    results[serverId] = response
+
+            # again, see if there's any timeouts on log send, and if so, remove
+            for serverId, response in results:
+                if response == "Frontend failed on log send.":
+                    print(response + " Time to panic.")
+                elif response == "Timeout on long send." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
+                    print(response + " No heartbeat in the past 5 seconds. Removing serverId "+str(serverId)+" from list.")   
+
+            # last action before releasing keyLock
+            log.remove((thisWriteId, thisKey, thisValue))
 
         return str(results)
 
@@ -132,27 +148,52 @@ class FrontendRPCServer:
     def get(self, key):
         # send read to first server w/ this key unlocked
         for serverId in list(kvsServers.keys()):
-            if (serverId, key) not in lockedServerKeyPairs:
+            with serverLocks[serverId]:
                 try:
                     proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                     response = proxy.get(key)
                     return response
                 except Exception as e:
-                    print("Server %d timeout on get, removing." % serverId)
-                    kvsServers.pop(serverId)
+                    if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
+                        print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
+                        kvsServers.pop(serverId)
 
-        ## boilerplate code below
-        # serverId = key % len(kvsServers)
-        # return kvsServers[serverId].get(key)
+    def heartbeat(self):
+        def sendHeartbeat(serverId):
+            try:
+                proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                # TODO: add this function to server
+                response = proxy.heartbeat()
+                if response == "I'm here for you, boss":
+                    serverTimestamps[serverId] = datetime.now()
+            except xmlrpc.client.Fault as e:
+                # raise Exception(serverId, e, "Frontend failed on log send.")
+                response = "Frontend failed on heartbeat."
+            except Exception as e:
+                # declare dead
+                # raise Exception(serverId, e, "Timeout on log send.")
+                response = "Timeout on heartbeat."
+            return (serverId, response)
+
+        results = dict()
+        with ThreadPoolExecutor() as executor:
+            commands = {executor.submit(sendHeartbeat, serverId) for serverId, _ in kvsServers.items()}
+            for future in as_completed(commands):
+                serverId, response = future.result()
+                results[serverId] = response
+
+        for serverId, response in results:
+            if response == "Frontend failed on log send.":
+                print(response + " Time to panic.")
+            elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
+                print(response + " No put/get response in the past 5 seconds. Removing serverId "+str(serverId)+" from list.")   
+
 
     ## printKVPairs: This function routes requests to servers
     ## matched with the given serverIds.
     def printKVPairs(self, serverId):
         if serverId not in kvsServers:
             return "ERR_NOEXIST"
-
-        # for server, key in lockedServerKeyPairs:
-            # if serverId == server:
                 
         return kvsServers[serverId].printKVPairs()
 

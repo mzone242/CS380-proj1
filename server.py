@@ -30,15 +30,15 @@ class KVSRPCServer():
     def put(self, key, value, writeId):
         global writeCtr
         # kvStore[key] = value
-        # return "On it boss"
+        # return "On it, boss"
         if writeId == writeCtr + 1:
             kvStore[key] = value
             writeCtr += 1
-            return "On it boss"
+            return "On it, boss"
             # return "[Server " + str(serverId) + "] Receive a put request: " + "Key = " + str(key) + ", Val = " + str(value)
         else:
             # need to alert frontend to send 
-            return "NACK"
+            return "No can do boss"
 
     def get(self, key):
         # return in format k:v
@@ -62,11 +62,11 @@ class KVSRPCServer():
             kvStore[k] = v
         # updating our writeID
         writeCtr = log[-1][0]
-        return "You got it boss"
+        return "You got it, boss"
 
 
     def heartbeat(self):
-        return 1
+        return "I'm here for you, boss"
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '''To be added.''')
