@@ -38,7 +38,7 @@ class KVSRPCServer():
             # return "[Server " + str(serverId) + "] Receive a put request: " + "Key = " + str(key) + ", Val = " + str(value)
         else:
             # need to alert frontend to send 
-            return "No can do boss"
+            return "No can do, boss"
 
     def get(self, key):
         # return in format k:v
