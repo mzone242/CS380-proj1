@@ -159,7 +159,9 @@ class FrontendRPCServer:
     def get(self, key):
         # send read to first server w/ this key unlocked
         # condvar instead of lock here?
-        for serverId in shuffle(list(kvsServers.keys())):
+        serverList = list(kvsServers.keys())
+        shuffle(serverList)
+        for serverId in serverList:
             with serverLocks[serverId]:
                 try:
                     proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
@@ -218,7 +220,8 @@ class FrontendRPCServer:
     ## serverId to the cluster membership.
     def addServer(self, serverId):
         # with lock():
-        oldServerList = shuffle(list(kvsServers.keys()))
+        oldServerList = list(kvsServers.keys())
+        shuffle(oldServerList)
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
         responses = []
         if oldServerList:
@@ -238,7 +241,7 @@ class FrontendRPCServer:
                         response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
                         kvsServers.pop(sID)
         
-        return str(kvsServers.keys())
+        return str(kvsServers.keys)
 
     ## listServer: This function prints out a list of servers that
     ## are currently active/alive inside the cluster.
