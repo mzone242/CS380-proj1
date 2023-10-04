@@ -1,5 +1,6 @@
 from datetime import datetime
 from threading import Lock
+from random import shuffle
 import xmlrpc.client
 import xmlrpc.server
 from socketserver import ThreadingMixIn
@@ -111,7 +112,11 @@ class FrontendRPCServer:
             with writeIdLock:
                 writeId += 1
                 thisWriteId, thisKey, thisValue = writeId, key, value
-            log.append((thisWriteId, thisKey, thisValue))
+                log.append((thisWriteId, thisKey, thisValue))
+            
+            # with lock():
+            #     pass
+
             with ThreadPoolExecutor() as executor:
                 commands = {executor.submit(sendPut, serverId, key, value, writeId) for serverId, _ in kvsServers.items()}
                 for future in as_completed(commands):
@@ -119,7 +124,7 @@ class FrontendRPCServer:
                     results[serverId] = response
 
             # if timeout on put and heartbeat not recorded in a while, it's dead
-            for serverId, response in results:
+            for serverId, response in results.items():
                 if response == "Frontend failed on put.":
                     print(response + " Time to panic.")
                 elif response == "Timeout on put." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
@@ -153,18 +158,22 @@ class FrontendRPCServer:
     # read
     def get(self, key):
         # send read to first server w/ this key unlocked
-        for serverId in list(kvsServers.keys()):
-            with serverLocks[serverId]:
-                try:
-                    proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
-                    response = proxy.get(key)
-                except Exception as e:
-                    if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
-                        # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
-                        response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
-                        kvsServers.pop(serverId)
-
-        return str(response)
+        # condvar instead of lock here?
+        serverList = list(kvsServers.keys())
+        shuffle(serverList)
+        for serverId in serverList:
+            # with serverLocks[serverId]:
+            try:
+                proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                response = proxy.get(key)
+                return str(response)
+            except Exception as e:
+                if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
+                    # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
+                    response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
+                    kvsServers.pop(serverId)
+        return key + ":ERR_KEY"
+        
 
     def heartbeat(self):
         def sendHeartbeat(serverId):
@@ -210,8 +219,31 @@ class FrontendRPCServer:
     ## addServer: This function registers a new server with the
     ## serverId to the cluster membership.
     def addServer(self, serverId):
+        # with lock():
+        oldServerList = list(kvsServers.keys())
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
-        return "Success"
+        responses = []
+        if oldServerList:
+            shuffle(oldServerList)
+            for sID in oldServerList:
+                try:
+                    proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + sID))
+                    kvPairs = proxy.printKVPairs()
+                    proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                    responses.append(proxy.addKVPairs(kvPairs))
+                    responses.append(proxy.updateWriteCtr(writeId))
+                    if log:
+                        responses.append(proxy.processLog(log))
+                    return str(responses)
+
+                except Exception as e:
+                    pass
+                    # if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=5):
+                    #     # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
+                    #     response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
+                    #     kvsServers.pop(sID)
+        
+        return str(kvsServers.keys()) + " " + str(responses)
 
     ## listServer: This function prints out a list of servers that
     ## are currently active/alive inside the cluster.
