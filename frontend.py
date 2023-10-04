@@ -218,24 +218,25 @@ class FrontendRPCServer:
     ## serverId to the cluster membership.
     def addServer(self, serverId):
         # with lock():
+        oldServerList = shuffle(list(kvsServers.keys()))
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
         responses = []
-        
-        for sID in shuffle(list(kvsServers.keys())):
-            try:
-                proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + sID))
-                kvPairs = proxy.printKVPairs()
-                proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
-                responses.append(proxy.addKVPairs(kvPairs))
-                responses.append(proxy.updateWriteCtr(writeId))
-                responses.append(proxy.processLog(log))
-                return str(responses)
+        if oldServerList:
+            for sID in oldServerList:
+                try:
+                    proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + sID))
+                    kvPairs = proxy.printKVPairs()
+                    proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                    responses.append(proxy.addKVPairs(kvPairs))
+                    responses.append(proxy.updateWriteCtr(writeId))
+                    responses.append(proxy.processLog(log))
+                    return str(responses)
 
-            except Exception as e:
-                if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=5):
-                    # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
-                    response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
-                    kvsServers.pop(sID)
+                except Exception as e:
+                    if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=5):
+                        # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
+                        response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
+                        kvsServers.pop(sID)
         
         return "Success"
 
