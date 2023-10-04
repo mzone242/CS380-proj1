@@ -102,8 +102,8 @@ class FrontendRPCServer:
        
         # check if this key is new: if so, create lock for it
         if key not in keyLocks.keys():
-            dict[key] = Lock()
-        keyLock = dict[key]
+            keyLocks[key] = Lock()
+        keyLock = keyLocks[key]
         with keyLock:
             # spawn one put thread per server, block til all servers ACK/timeout
             # lock key and add to list of server : key
