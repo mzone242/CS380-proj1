@@ -59,7 +59,7 @@ class KVSRPCServer():
     def processLog(self, log):
         global writeCtr
         for _, k, v in log:
-            kvStore[k] = v
+            kvStore[int(k)] = int(v)
         # updating our writeID
         writeCtr = log[-1][0]
         return "You got it, boss"
@@ -69,7 +69,7 @@ class KVSRPCServer():
             kvList = kvPairs.split()
             for pair in kvList:
                 k, v = pair.split(":")
-                kvStore[k] = v
+                kvStore[int(k)] = int(v)
         return "Added KV Pairs"
 
     def updateWriteCtr(self, writeId):
