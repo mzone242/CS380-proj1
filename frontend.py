@@ -103,8 +103,8 @@ class FrontendRPCServer:
        
         # check if this key is new: if so, create lock for it
         if key not in keyLocks.keys():
-            dict[key] = Lock()
-        keyLock = dict[key]
+            keyLocks[key] = Lock()
+        keyLock = keyLocks[key]
         with keyLock:
             # spawn one put thread per server, block til all servers ACK/timeout
             # lock key and add to list of server : key
@@ -112,7 +112,7 @@ class FrontendRPCServer:
             with writeIdLock:
                 writeId += 1
                 thisWriteId, thisKey, thisValue = writeId, key, value
-            log.append((thisWriteId, thisKey, thisValue))
+                log.append((thisWriteId, thisKey, thisValue))
             
             # with lock():
             #     pass
@@ -162,16 +162,16 @@ class FrontendRPCServer:
         serverList = list(kvsServers.keys())
         shuffle(serverList)
         for serverId in serverList:
-            with serverLocks[serverId]:
-                try:
-                    proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
-                    response = proxy.get(key)
-                    return str(response)
-                except Exception as e:
-                    if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
-                        # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
-                        response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
-                        kvsServers.pop(serverId)
+            # with serverLocks[serverId]:
+            try:
+                proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                response = proxy.get(key)
+                return str(response)
+            except Exception as e:
+                if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
+                    # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
+                    response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
+                    kvsServers.pop(serverId)
         return key + ":ERR_KEY"
         
 
