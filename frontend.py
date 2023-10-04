@@ -112,7 +112,7 @@ class FrontendRPCServer:
             with writeIdLock:
                 writeId += 1
                 thisWriteId, thisKey, thisValue = writeId, key, value
-                log.append((thisWriteId, thisKey, thisValue))
+            log.append((thisWriteId, thisKey, thisValue))
             
             # with lock():
             #     pass
