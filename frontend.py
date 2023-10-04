@@ -199,7 +199,7 @@ class FrontendRPCServer:
                 serverId, response = future.result()
                 results[serverId] = response
 
-        for serverId, response in results:
+        for serverId, response in results.items():
             if response == "Frontend failed on heartbeat.":
                 print(response + " Time to panic.")
             elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
@@ -229,6 +229,7 @@ class FrontendRPCServer:
                 try:
                     proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + sID))
                     kvPairs = proxy.printKVPairs()
+                    responses.append(kvPairs)
                     proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                     responses.append(proxy.addKVPairs(kvPairs))
                     responses.append(proxy.updateWriteCtr(writeId))
