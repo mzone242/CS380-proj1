@@ -223,7 +223,7 @@ class FrontendRPCServer:
         oldServerList = list(kvsServers.keys())
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
         responses = []
-        if kvsServers:
+        if oldServerList:
             shuffle(oldServerList)
             for sID in oldServerList:
                 try:
