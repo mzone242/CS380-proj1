@@ -236,10 +236,11 @@ class FrontendRPCServer:
                     return str(responses)
 
                 except Exception as e:
-                    if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=5):
-                        # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
-                        response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
-                        kvsServers.pop(sID)
+                    pass
+                    # if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=5):
+                    #     # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
+                    #     response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
+                    #     kvsServers.pop(sID)
         
         return str(kvsServers.keys())
 
