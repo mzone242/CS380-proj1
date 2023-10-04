@@ -69,7 +69,7 @@ class KVSRPCServer():
             kvList = kvPairs.split()
             for pair in kvList:
                 k, v = pair.split(":")
-                kvstore[k] = v
+                kvStore[k] = v
         return "Added KV Pairs"
 
     def updateWriteCtr(self, writeId):
