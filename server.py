@@ -64,6 +64,13 @@ class KVSRPCServer():
         writeCtr = log[-1][0]
         return "You got it, boss"
 
+    def addKVPairs(self, kvPairs):
+        kvList = kvPairs.split()
+        for pair in kvList:
+            k, v = pair.split(":")
+            kvstore[k] = v
+        return "Added KV Pairs"
+
 
     def heartbeat(self):
         return "I'm here for you, boss"

@@ -1,5 +1,6 @@
 from datetime import datetime
 from threading import Lock
+from random import shuffle
 import xmlrpc.client
 import xmlrpc.server
 from socketserver import ThreadingMixIn
@@ -111,7 +112,11 @@ class FrontendRPCServer:
             with writeIdLock:
                 writeId += 1
                 thisWriteId, thisKey, thisValue = writeId, key, value
-            log.append((thisWriteId, thisKey, thisValue))
+                log.append((thisWriteId, thisKey, thisValue))
+            
+            # with lock():
+            #     pass
+
             with ThreadPoolExecutor() as executor:
                 commands = {executor.submit(sendPut, serverId, key, value, writeId) for serverId, _ in kvsServers.items()}
                 for future in as_completed(commands):
@@ -153,18 +158,20 @@ class FrontendRPCServer:
     # read
     def get(self, key):
         # send read to first server w/ this key unlocked
-        for serverId in list(kvsServers.keys()):
+        # condvar instead of lock here?
+        for serverId in shuffle(list(kvsServers.keys())):
             with serverLocks[serverId]:
                 try:
                     proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                     response = proxy.get(key)
+                    return str(response)
                 except Exception as e:
                     if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
                         # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
                         response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
                         kvsServers.pop(serverId)
-
-        return str(response)
+        return key + ":ERR_KEY"
+        
 
     def heartbeat(self):
         def sendHeartbeat(serverId):
@@ -210,7 +217,23 @@ class FrontendRPCServer:
     ## addServer: This function registers a new server with the
     ## serverId to the cluster membership.
     def addServer(self, serverId):
+        # with lock():
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
+        
+        for sID in shuffle(list(kvsServers.keys())):
+            try:
+                proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + sID))
+                kvPairs = proxy.printKVPairs()
+                proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                response = proxy.addKVPairs(kvPairs)
+                respones2 = proxy.processLog(log)
+
+            except Exception as e:
+                if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=5):
+                    # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
+                    response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
+                    kvsServers.pop(sID)
+        
         return "Success"
 
     ## listServer: This function prints out a list of servers that
