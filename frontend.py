@@ -221,10 +221,10 @@ class FrontendRPCServer:
     def addServer(self, serverId):
         # with lock():
         oldServerList = list(kvsServers.keys())
-        shuffle(oldServerList)
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
         responses = []
-        if oldServerList:
+        if kvsServers:
+            shuffle(oldServerList)
             for sID in oldServerList:
                 try:
                     proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + sID))
@@ -241,7 +241,7 @@ class FrontendRPCServer:
                         response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
                         kvsServers.pop(sID)
         
-        return str(kvsServers.keys)
+        return str(kvsServers.keys())
 
     ## listServer: This function prints out a list of servers that
     ## are currently active/alive inside the cluster.
