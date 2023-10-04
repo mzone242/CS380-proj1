@@ -242,7 +242,7 @@ class FrontendRPCServer:
                     #     response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
                     #     kvsServers.pop(sID)
         
-        return str(kvsServers.keys())
+        return str(kvsServers.keys()) + " " + str(responses)
 
     ## listServer: This function prints out a list of servers that
     ## are currently active/alive inside the cluster.
