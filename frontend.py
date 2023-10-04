@@ -141,7 +141,7 @@ class FrontendRPCServer:
                     results[serverId] = response
 
             # again, see if there's any timeouts on log send, and if so, remove
-            for serverId, response in results:
+            for serverId, response in results.items():
                 if response == "Frontend failed on log send.":
                     print(response + " Time to panic.")
                     # results[serverId] = "Frontend failed on log send; panicking."
