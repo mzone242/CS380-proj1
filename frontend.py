@@ -135,7 +135,7 @@ class FrontendRPCServer:
 
             # if any server says they have gaps: send log and wait for ACK
             with ThreadPoolExecutor() as executor:
-                commands = {executor.submit(sendLog, serverId) for serverId, response in results if response == "No can do, boss"}
+                commands = {executor.submit(sendLog, serverId) for serverId, response in results.items() if response == "No can do, boss"}
                 for future in as_completed(commands):
                     serverId, response = future.result()
                     results[serverId] = response
