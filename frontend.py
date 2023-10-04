@@ -219,14 +219,17 @@ class FrontendRPCServer:
     def addServer(self, serverId):
         # with lock():
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
+        responses = []
         
         for sID in shuffle(list(kvsServers.keys())):
             try:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + sID))
                 kvPairs = proxy.printKVPairs()
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
-                response = proxy.addKVPairs(kvPairs)
-                respones2 = proxy.processLog(log)
+                responses.append(proxy.addKVPairs(kvPairs))
+                responses.append(proxy.updateWriteCtr(writeId))
+                responses.append(proxy.processLog(log))
+                return str(responses)
 
             except Exception as e:
                 if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=5):

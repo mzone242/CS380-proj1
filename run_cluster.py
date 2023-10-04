@@ -32,6 +32,7 @@ def add_nodes(k8s_client, k8s_apps_client, node_type, num_nodes, prefix=None):
             k8s_client.create_namespaced_pod(namespace=util.NAMESPACE, body=server_spec)
             util.check_wait_pod_status(k8s_client, 'role=server-%d' % serverUID, 'Running')
             result = frontend.addServer(serverUID)
+            print(result)
             serverUID += 1
         elif node_type == 'client':
             client_spec = util.load_yaml('yaml/pods/client-pod.yml', prefix)

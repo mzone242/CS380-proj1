@@ -71,6 +71,10 @@ class KVSRPCServer():
             kvstore[k] = v
         return "Added KV Pairs"
 
+    def updateWriteCtr(self, writeId):
+        global writeCtr
+        writeCtr = writeId
+        return "Updated"
 
     def heartbeat(self):
         return "I'm here for you, boss"
