@@ -18,6 +18,7 @@ baseServerPort = 9000
 writeId = 0
 writeIdLock = Lock()
 serverLocks = dict()
+addServerLock = Lock()
 
 class TimeoutTransport(xmlrpc.client.Transport):
 
@@ -114,8 +115,8 @@ class FrontendRPCServer:
                 thisWriteId, thisKey, thisValue = writeId, key, value
                 log.append((thisWriteId, thisKey, thisValue))
             
-            # with lock():
-            #     pass
+            with addServerLock:
+                pass
 
             with ThreadPoolExecutor() as executor:
                 commands = {executor.submit(sendPut, serverId, key, value, writeId) for serverId, _ in kvsServers.items()}
@@ -214,37 +215,35 @@ class FrontendRPCServer:
     def printKVPairs(self, serverId):
         if serverId not in kvsServers:
             return "ERR_NOEXIST"
+        # need to account for timeout; if happens return ERR_NOEXIST
         return kvsServers[serverId].printKVPairs()
 
     ## addServer: This function registers a new server with the
     ## serverId to the cluster membership.
     def addServer(self, serverId):
-        # with lock():
-        oldServerList = list(kvsServers.keys())
-        kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
-        responses = []
-        if oldServerList:
-            shuffle(oldServerList)
-            for sID in oldServerList:
-                try:
-                    proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + sID))
-                    kvPairs = proxy.printKVPairs()
-                    responses.append(kvPairs)
-                    proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
-                    responses.append(proxy.addKVPairs(kvPairs))
-                    responses.append(proxy.updateWriteCtr(writeId))
-                    if log:
-                        responses.append(proxy.processLog(log))
-                    return str(responses)
+        with addServerLock:
+            oldServerList = list(kvsServers.keys())
+            responses = []
+            if oldServerList:
+                shuffle(oldServerList)
+                proxy_new = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                for server in oldServerList:
+                    try:
+                        proxy_old = TimeoutServerProxy(baseAddr + str(baseServerPort + server))
+                        kvPairs = proxy_old.printKVPairs()
+                        responses.append(kvPairs)
+                        responses.append(proxy_new.addKVPairs(kvPairs))
+                        responses.append(proxy_new.updateWriteCtr(writeId))
+                        if log:
+                            responses.append(proxy_new.processLog(log))
+                        kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
+                        return str(responses)
 
-                except Exception as e:
-                    pass
-                    # if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=5):
-                    #     # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
-                    #     response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
-                    #     kvsServers.pop(sID)
-        
-        return str(kvsServers.keys()) + " " + str(responses)
+                    except Exception as e:
+                        pass
+            
+            kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
+            return str(kvsServers.keys()) + " " + str(responses)
 
     ## listServer: This function prints out a list of servers that
     ## are currently active/alive inside the cluster.
