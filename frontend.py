@@ -247,7 +247,7 @@ class FrontendRPCServer:
         for serverId, rpcHandle in kvsServers.items():
             serverList.append(serverId)
         if not len(serverList): return "ERR_NOSERVERS"
-        return serverList
+        return (str(serverList)[1:-1])
 
     ## shutdownServer: This function routes the shutdown request to
     ## a server matched with the specified serverId to let the corresponding
