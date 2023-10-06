@@ -135,7 +135,8 @@ class FrontendRPCServer:
             if keyMonitor.waitingReaders == 0:
                 keyMonitor.writeCV.notify()
             else:
-                keyMonitor.readCV.notify_all()
+                with keyMonitor.readCV:
+                    keyMonitor.readCV.notify_all()
 
         return str(results)
 
@@ -171,7 +172,8 @@ class FrontendRPCServer:
         with keyMonitor.readCV:
             keyMonitor.readers -= 1
             if keyMonitor.readers == 0:
-                keyMonitor.writeCV.notify()
+                with keyMonitor.writeCV:
+                    keyMonitor.writeCV.notify()
 
         return response
         
