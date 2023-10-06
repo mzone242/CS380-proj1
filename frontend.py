@@ -77,6 +77,10 @@ class FrontendRPCServer:
                 response = "Timeout on log send."
             return (serverId, response)
 
+        
+        # check for no servers
+        if not len(kvsServers.keys()):
+            return "ERR_NOSERVERS"
        
         # check if this key is new: if so, create monitor for it
         if key not in keyMonitors.keys():
