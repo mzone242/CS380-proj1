@@ -143,10 +143,10 @@ class FrontendRPCServer:
     def get(self, key):
         serverList = list(kvsServers.keys())
         shuffle(serverList)
-        response = key + ":ERR_KEY"
+        response = str(key) + ":ERR_KEY"
 
         if key not in keyMonitors.key():
-            return str(response)
+            return response
 
         # beginRead
         keyMonitor = keyMonitors[key]
@@ -173,7 +173,7 @@ class FrontendRPCServer:
             if keyMonitor.readers == 0:
                 keyMonitor.writeCV.notify()
 
-        return str(response)
+        return response
         
 
     def heartbeat(self):
