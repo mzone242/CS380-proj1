@@ -143,9 +143,13 @@ class FrontendRPCServer:
     def get(self, key):
         serverList = list(kvsServers.keys())
         shuffle(serverList)
+        response = key + ":ERR_KEY"
+
+        if key not in keyMonitors.key():
+            return str(response)
 
         # beginRead
-        keyMonitor = keyMonitor
+        keyMonitor = keyMonitors[key]
         with keyMonitor.readCV:
             keyMonitor.waitingReaders += 1
             if keyMonitor.writers > 0:
@@ -157,7 +161,6 @@ class FrontendRPCServer:
             try:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 response = proxy.get(key)
-                return str(response)
             except Exception as e:
                 if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds = 0.1):
                     # print("Server %d timeout on get and no heartbeat in the past 0.1 seconds. Removing." % serverId)
@@ -170,7 +173,7 @@ class FrontendRPCServer:
             if keyMonitor.readers == 0:
                 keyMonitor.writeCV.notify()
 
-        return key + ":ERR_KEY"
+        return str(response)
         
 
     def heartbeat(self):
@@ -244,12 +247,13 @@ class FrontendRPCServer:
     ## listServer: This function prints out a list of servers that
     ## are currently active/alive inside the cluster.
     def listServer(self):
-        serverList = []
-        for serverId, rpcHandle in kvsServers.items():
-            serverList.append(serverId)
-        if not len(serverList): return "ERR_NOSERVERS"
-        st = str(serverList)[1:-1]
-        return "I'm gonna beat your ass"
+        # serverList = []
+        # for serverId, rpcHandle in kvsServers.items():
+        #     serverList.append(serverId)
+        # st = str(serverList)[1:-1]
+        if len(serverList): 
+            return kvsServers.keys()
+        return "ERR_NOSERVERS"
 
     ## shutdownServer: This function routes the shutdown request to
     ## a server matched with the specified serverId to let the corresponding
