@@ -229,6 +229,7 @@ class FrontendRPCServer:
                     responses.append(proxy.updateWriteCtr(writeId))
                     if log:
                         responses.append(proxy.processLog(log))
+                    serverTimestamps[serverId] = datetime.now()
                     return str(responses)
 
                 except Exception as e:
