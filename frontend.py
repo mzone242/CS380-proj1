@@ -80,7 +80,7 @@ class FrontendRPCServer:
        
         # check if this key is new: if so, create monitor for it
         if key not in keyMonitors.keys():
-            keyMonitor = RWMonitor()
+            keyMonitors[key] = RWMonitor()
         keyMonitor = keyMonitors[key]
 
         with keyMonitor.writeCV:
