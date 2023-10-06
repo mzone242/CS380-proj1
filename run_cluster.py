@@ -64,7 +64,6 @@ def addServer(k8s_client, k8s_apps_client, prefix):
 
 def listServer():
     result = frontend.listServer()
-    print(type(result))
     print(result)
 
 def killServer(k8s_client, k8s_apps_client, serverId):
@@ -91,7 +90,11 @@ def loadDataset(thread_id, keys, load_vals, num_threads):
     end_idx = int(start_idx + (int((len(keys) / num_threads))))
 
     for idx in range(start_idx, end_idx):
-        result = clientList[thread_id].put(keys[idx], load_vals[idx])
+        try:
+            result = clientList[thread_id].put(keys[idx], load_vals[idx])
+        except:
+            print("[Error in thread %d] put request fail, key = %d, val = %d" % (thread_id, keys[idx], load_vals[idx]))
+            return
 
 def runWorkload(k8s_client, k8s_apps_client, prefix, thread_id,
                 keys, load_vals, run_vals, num_threads, num_requests,
@@ -111,11 +114,20 @@ def runWorkload(k8s_client, k8s_apps_client, prefix, thread_id,
                 elif remove_server == 1:
                     shutdownServer(k8s_client, k8s_apps_client, 0)
             newval = random.randint(0, 1000000)
-            clientList[thread_id].put(keys[idx], newval)
-            result = clientList[thread_id].get(keys[idx])
-            result = result.split(':')
-            if int(result[0]) != keys[idx] or int(result[1]) != newval:
-                print("[Error] request = (%d, %d), return = (%d, %d)" % (keys[idx], newval, int(result[0]), int(result[1])))
+            try:
+                clientList[thread_id].put(keys[idx], newval)
+            except:
+                print("[Error in thread %d] put request fail, key = %d, val = %d" % (thread_id, keys[idx], newval))
+                return
+
+            try:
+                result = clientList[thread_id].get(keys[idx])
+                result = result.split(':')
+                if int(result[0]) != keys[idx] or int(result[1]) != newval:
+                    print("[Error] request = (%d, %d), return = (%d, %d)" % (keys[idx], newval, int(result[0]), int(result[1])))
+                    return
+            except:
+                print("[Error in thread %d] get request fail, key = %d", keys[idx])
                 return
             request_count += 1
     else:
@@ -132,27 +144,30 @@ def runWorkload(k8s_client, k8s_apps_client, prefix, thread_id,
                 if request_count == num_requests:
                     break
                 if optype[idx % 100] == "Put":
-                    result = clientList[thread_id].put(keys[idx], run_vals[idx])
+                    try:
+                        result = clientList[thread_id].put(keys[idx], run_vals[idx])
+                    except:
+                        print("[Error in thread %d] put request fail, key = %d, val = %d" % (thread_id, keys[idx], run_vals[idx]))
+                        return
                 elif optype[idx % 100] == "Get":
-                    result = clientList[thread_id].get(keys[idx])
-                    result = result.split(':')
-                    if int(result[0]) != keys[idx] or int(result[1]) != load_vals[idx]:
-                        print("[Error] request = (%d, %d), return = (%d, %d)" % (keys[idx], load_vals[idx], int(result[0]), int(result[1])))
+                    try:
+                        result = clientList[thread_id].get(keys[idx])
+                        result = result.split(':')
+                        if int(result[0]) != keys[idx] or int(result[1]) != load_vals[idx]:
+                            print("[Error] request = (%d, %d), return = (%d, %d)" % (keys[idx], load_vals[idx], int(result[0]), int(result[1])))
+                            return
+                    except:
+                        print("[Error in thread %d] get request fail, key = %d", keys[idx])
                         return
                 else:
                     print("[Error] unknown operation type")
                     return
                 request_count += 1
-                
-'''
-testKVS:10000:4:10000:50:1:1:0:0
-'''
+
 def testKVS(k8s_client, k8s_apps_client, prefix, num_keys, num_threads,
             num_requests, put_ratio, test_consistency=0, crash_server=0,
             add_server=0, remove_server=0):
     serverList = frontend.listServer()
-    # serverList = str(serverList)
-    # print(serverList, type(serverList))
     serverList = serverList.split(',')
     if len(serverList) < 1:
         print("[Error] Servers do not exist")
@@ -168,9 +183,9 @@ def testKVS(k8s_client, k8s_apps_client, prefix, num_keys, num_threads,
     load_vals = list(range(0, num_keys))
     run_vals = list(range(num_keys, num_keys * 2))
 
-    random.shuffle(keys)
-    random.shuffle(load_vals)
-    random.shuffle(run_vals)
+    random.shuffle(keys);
+    random.shuffle(load_vals);
+    random.shuffle(run_vals);
 
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=num_threads)
     start = time.time()
@@ -261,8 +276,7 @@ if __name__ == '__main__':
                                     use the default ($KVS_HOME/conf/kvs-base.yml).''')
 
     if 'KVS_HOME' not in os.environ:
-        print("we're here, somehow")
-        os.environ['KVS_HOME'] = "/home/" + os.environ['USER'] + "/projects/cs380d-f23/project1"
+        os.environ['KVS_HOME'] = "/home/" + os.environ['USER'] + "/projects/cs380d-f23/project1/"
 
     parser.add_argument('-c', '--client', nargs=1, type=int, metavar='C',
                         help='The number of client nodes to start with ' +
