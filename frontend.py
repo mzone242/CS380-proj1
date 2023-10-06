@@ -1,5 +1,7 @@
-from datetime import datetime
+from threading import Condition
+from threading import RLock
 from threading import Lock
+from datetime import datetime
 from random import shuffle
 import xmlrpc.client
 import xmlrpc.server
@@ -18,6 +20,10 @@ baseServerPort = 9000
 writeId = 0
 writeIdLock = Lock()
 serverLocks = dict()
+readCV = Condition()
+writeCV = Condition()
+readers, writers = 0, 0
+rlock = RLock()
 
 class TimeoutTransport(xmlrpc.client.Transport):
 
@@ -73,6 +79,11 @@ class FrontendRPCServer:
             try:
                 # lockedKeys.add(key)
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+                rlock.acquire()
+                while writers or readers > 0:
+                    writeCV.wait()
+                writers = True
+                rlock.release()
                 response = proxy.put(key, value, writeId)
                 if response == "On it, boss":
                     serverTimestamps[serverId] = datetime.now()
@@ -165,13 +176,23 @@ class FrontendRPCServer:
             # with serverLocks[serverId]:
             try:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
-                response = proxy.get(key)
+                rlock.acquire()
+                while writers > 0:
+                    readCV.wait()
+                readers += 1
+                readCV.signal()
+                rlock.release()
                 return str(response)
             except Exception as e:
                 if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
                     # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
                     response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
                     kvsServers.pop(serverId)
+        rlock.acquire()
+        readers -= 1
+        if readers == 0:
+            writeCV.signal()
+        rlock.release()            
         return key + ":ERR_KEY"
         
 
