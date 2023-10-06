@@ -20,7 +20,7 @@ writeId = 0
 writeIdLock = Lock()
 
 class RWMonitor:
-    def __init__(self, timeout, use_datetime=0):
+    def __init__(self):
         self.readCV = Condition()
         self.writeCV = Condition()
         self.readers, self.writers, self.waitingReaders = 0, 0, 0
