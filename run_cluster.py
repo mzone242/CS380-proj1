@@ -64,6 +64,7 @@ def addServer(k8s_client, k8s_apps_client, prefix):
 
 def listServer():
     result = frontend.listServer()
+    print(type(result))
     print(result)
 
 def killServer(k8s_client, k8s_apps_client, serverId):
@@ -150,8 +151,8 @@ def testKVS(k8s_client, k8s_apps_client, prefix, num_keys, num_threads,
             num_requests, put_ratio, test_consistency=0, crash_server=0,
             add_server=0, remove_server=0):
     serverList = frontend.listServer()
-    serverList = str(serverList)
-    print(serverList, type(serverList))
+    # serverList = str(serverList)
+    # print(serverList, type(serverList))
     serverList = serverList.split(',')
     if len(serverList) < 1:
         print("[Error] Servers do not exist")
