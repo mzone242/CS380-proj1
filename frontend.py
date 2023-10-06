@@ -243,11 +243,12 @@ class FrontendRPCServer:
     ## listServer: This function prints out a list of servers that
     ## are currently active/alive inside the cluster.
     def listServer(self):
-        serverList = ""
+        serverList = []
         for serverId, rpcHandle in kvsServers.items():
-            serverList = serverList + serverId + ", "
+            serverList.append(serverId)
         if not len(serverList): return "ERR_NOSERVERS"
-        return "I'll fucking kill you"
+        st = str(serverList)[1:-1]
+        return st
 
     ## shutdownServer: This function routes the shutdown request to
     ## a server matched with the specified serverId to let the corresponding
