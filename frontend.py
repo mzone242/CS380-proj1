@@ -2,7 +2,7 @@ from threading import Condition
 from threading import RLock
 from threading import Lock
 from datetime import datetime
-from random import shuffle
+from random import shuffle, choice
 import xmlrpc.client
 import xmlrpc.server
 from socketserver import ThreadingMixIn
@@ -166,6 +166,7 @@ class FrontendRPCServer:
             try:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 response = proxy.get(key)
+                break
             except Exception as e:
                 if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds = 0.1):
                     # print("Server %d timeout on get and no heartbeat in the past 0.1 seconds. Removing." % serverId)
@@ -175,7 +176,7 @@ class FrontendRPCServer:
         # endRead
         with keyMonitor.readCV:
             keyMonitor.readers -= 1
-            if keyMonitor.readers == 0:
+            if keyMonitor.readers == 0 and keyMonitor.writers > 0:
                 with keyMonitor.writeCV:
                     keyMonitor.writeCV.notify()
 
