@@ -164,7 +164,7 @@ class FrontendRPCServer:
 
         while(kvsServers):
             serverId = random.choice(list(kvsServers.keys()))
-            serverId = 0
+            # serverId = 0
             try:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 response = proxy.get(key)
