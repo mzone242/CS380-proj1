@@ -142,7 +142,8 @@ def runWorkload(k8s_client, k8s_apps_client, prefix, thread_id,
                     print("[Error] unknown operation type")
                     return
                 request_count += 1
-
+                
+# testKVS:10000:4:10000:50:1:1:0:0
 def testKVS(k8s_client, k8s_apps_client, prefix, num_keys, num_threads,
             num_requests, put_ratio, test_consistency=0, crash_server=0,
             add_server=0, remove_server=0):
@@ -162,9 +163,9 @@ def testKVS(k8s_client, k8s_apps_client, prefix, num_keys, num_threads,
     load_vals = list(range(0, num_keys))
     run_vals = list(range(num_keys, num_keys * 2))
 
-    random.shuffle(keys);
-    random.shuffle(load_vals);
-    random.shuffle(run_vals);
+    random.shuffle(keys)
+    random.shuffle(load_vals)
+    random.shuffle(run_vals)
 
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=num_threads)
     start = time.time()
