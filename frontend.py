@@ -248,7 +248,7 @@ class FrontendRPCServer:
             serverList.append(serverId)
         if not len(serverList): return "ERR_NOSERVERS"
         st = str(serverList)[1:-1]
-        return st
+        return "I'm gonna beat your ass"
 
     ## shutdownServer: This function routes the shutdown request to
     ## a server matched with the specified serverId to let the corresponding
