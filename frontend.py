@@ -10,7 +10,7 @@ from xmlrpc.server import SimpleXMLRPCServer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 lockedKeys = set()
-keyLocks = dict()
+keyMonitors = dict() # maps key to RWMonitor
 log = [] # tuple of (writeId, key, value)
 # timestampLock = Lock()
 serverTimestamps = dict()
@@ -19,11 +19,12 @@ baseAddr = "http://localhost:"
 baseServerPort = 9000
 writeId = 0
 writeIdLock = Lock()
-serverLocks = dict()
-readCV = Condition()
-writeCV = Condition()
-readers, writers = 0, 0
-rlock = RLock()
+
+class RWMonitor:
+    def __init__(self, timeout, use_datetime=0):
+        self.readCV = Condition()
+        self.writeCV = Condition()
+        self.readers, self.writers, self.waitingReaders = 0, 0, 0
 
 class TimeoutTransport(xmlrpc.client.Transport):
 
@@ -38,24 +39,7 @@ class TimeoutTransport(xmlrpc.client.Transport):
 
 class TimeoutServerProxy(xmlrpc.client.ServerProxy):
 
-    def __init__(self, uri, timeout=5, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
-        t = TimeoutTransport(timeout)
-        xmlrpc.client.ServerProxy.__init__(self, uri, t, encoding, verbose, allow_none, use_datetime)
-
-class TimeoutTransport(xmlrpc.client.Transport):
-
-    def __init__(self, timeout, use_datetime=0):
-        self.timeout = timeout
-        xmlrpc.client.Transport.__init__(self, use_datetime)
-
-    def make_connection(self, host):
-        connection = xmlrpc.client.Transport.make_connection(self, host)
-        connection.timeout = self.timeout
-        return connection
-
-class TimeoutServerProxy(xmlrpc.client.ServerProxy):
-
-    def __init__(self, uri, timeout=5, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
+    def __init__(self, uri, timeout=0.1, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
         t = TimeoutTransport(timeout)
         xmlrpc.client.ServerProxy.__init__(self, uri, t, encoding, verbose, allow_none, use_datetime)
 
@@ -66,24 +50,11 @@ class FrontendRPCServer:
     # full write
     def put(self, key, value):
         global writeId
-        # threads = []
-        # for serverId, server in kvsServers.items():
-        #     thread = threading.Thread(target = putListen, args = (baseAddr + str(baseServerPort + serverId), (key, value)))
-        #     threads.append(thread)
-        #     thread.start()
-
-        # for t in threads:
-        #     t.join()
 
         def sendPut(serverId, key, value, writeId):
             try:
                 # lockedKeys.add(key)
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
-                rlock.acquire()
-                while writers or readers > 0:
-                    writeCV.wait()
-                writers = True
-                rlock.release()
                 response = proxy.put(key, value, writeId)
                 if response == "On it, boss":
                     serverTimestamps[serverId] = datetime.now()
@@ -112,11 +83,15 @@ class FrontendRPCServer:
             return (serverId, response)
 
        
-        # check if this key is new: if so, create lock for it
-        if key not in keyLocks.keys():
-            keyLocks[key] = Lock()
-        keyLock = keyLocks[key]
-        with keyLock:
+        # check if this key is new: if so, create monitor for it
+        if key not in keyMonitors.keys():
+            keyMonitor = RWMonitor()
+        keyMonitor = keyMonitors[key]
+
+        with keyMonitor.writeCV:
+            keyMonitor.writers += 1
+            while keyMonitor.readers > 0:
+                keyMonitor.writeCV.wait()
             # spawn one put thread per server, block til all servers ACK/timeout
             # lock key and add to list of server : key
             results = dict()
@@ -124,9 +99,6 @@ class FrontendRPCServer:
                 writeId += 1
                 thisWriteId, thisKey, thisValue = writeId, key, value
                 log.append((thisWriteId, thisKey, thisValue))
-            
-            # with lock():
-            #     pass
 
             with ThreadPoolExecutor() as executor:
                 commands = {executor.submit(sendPut, serverId, key, value, writeId) for serverId, _ in kvsServers.items()}
@@ -138,11 +110,10 @@ class FrontendRPCServer:
             for serverId, response in results.items():
                 if response == "Frontend failed on put.":
                     print(response + " Time to panic.")
-                elif response == "Timeout on put." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
-                    print(response + " No heartbeat in the past 5 seconds. Removing serverId "+str(serverId)+" from list.")        
+                elif response == "Timeout on put." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=0.1):
+                    print(response + " No heartbeat in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")        
                     results[serverId] = "Put timeout and no heartbeat; removing."  
                     kvsServers.pop(serverId)
-
 
             # if any server says they have gaps: send log and wait for ACK
             with ThreadPoolExecutor() as executor:
@@ -155,44 +126,55 @@ class FrontendRPCServer:
             for serverId, response in results.items():
                 if response == "Frontend failed on log send.":
                     print(response + " Time to panic.")
-                    # results[serverId] = "Frontend failed on log send; panicking."
-                elif response == "Timeout on log send." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
-                    print(response + " No heartbeat in the past 5 seconds. Removing serverId "+str(serverId)+" from list.")
+                    results[serverId] = "Frontend failed on log send; panicking."
+                elif response == "Timeout on log send." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=0.1):
+                    print(response + " No heartbeat in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
                     results[serverId] = "Log timeout and no heartbeat; removing."   
                     kvsServers.pop(serverId)
 
-            # last action before releasing keyLock
-            log.remove((thisWriteId, thisKey, thisValue))
+
+            with writeIdLock:
+                log.remove((thisWriteId, thisKey, thisValue))
+
+            keyMonitor.writers -= 1
+            if keyMonitor.waitingReaders == 0:
+                keyMonitor.writeCV.notify()
+            else:
+                keyMonitor.readCV.notify_all()
 
         return str(results)
 
     # read
     def get(self, key):
-        # send read to first server w/ this key unlocked
-        # condvar instead of lock here?
         serverList = list(kvsServers.keys())
         shuffle(serverList)
+
+        # beginRead
+        keyMonitor = keyMonitor
+        with keyMonitor.readCV:
+            keyMonitor.waitingReaders += 1
+            if keyMonitor.writers > 0:
+                keyMonitor.readCV.wait()
+            keyMonitor.waitingReaders -= 1
+            keyMonitor.readers += 1
+
         for serverId in serverList:
-            # with serverLocks[serverId]:
             try:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
-                rlock.acquire()
-                while writers > 0:
-                    readCV.wait()
-                readers += 1
-                readCV.signal()
-                rlock.release()
+                response = proxy.get(key)
                 return str(response)
             except Exception as e:
-                if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
-                    # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
-                    response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
+                if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds = 0.1):
+                    # print("Server %d timeout on get and no heartbeat in the past 0.1 seconds. Removing." % serverId)
+                    response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 0.1 seconds. Removing."
                     kvsServers.pop(serverId)
-        rlock.acquire()
-        readers -= 1
-        if readers == 0:
-            writeCV.signal()
-        rlock.release()            
+
+        # endRead
+        with keyMonitor.readCV:
+            keyMonitor.readers -= 1
+            if keyMonitor.readers == 0:
+                keyMonitor.writeCV.notify()
+
         return key + ":ERR_KEY"
         
 
@@ -200,16 +182,13 @@ class FrontendRPCServer:
         def sendHeartbeat(serverId):
             try:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
-                # TODO: add this function to server
                 response = proxy.heartbeat()
                 if response == "I'm here for you, boss":
                     serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
-                # raise Exception(serverId, e, "Frontend failed on log send.")
                 response = "Frontend failed on heartbeat."
             except Exception as e:
                 # declare dead
-                # raise Exception(serverId, e, "Timeout on log send.")
                 response = "Timeout on heartbeat."
             return (serverId, response)
 
@@ -223,9 +202,9 @@ class FrontendRPCServer:
         for serverId, response in results.items():
             if response == "Frontend failed on heartbeat.":
                 print(response + " Time to panic.")
-            elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=5):
-                print(response + " No put/get response in the past 5 seconds. Removing serverId "+str(serverId)+" from list.")
-                results[serverId] = "No recorded response in the past 5 seconds. Removing server."
+            elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=0.1):
+                print(response + " No put/get response in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
+                results[serverId] = "No recorded response in the past 0.1 seconds. Removing server."
 
         return "Results of this heartbeat: " + str(results) + " and current timestamps after this heartbeat: " + str(serverTimestamps)
 
@@ -240,7 +219,6 @@ class FrontendRPCServer:
     ## addServer: This function registers a new server with the
     ## serverId to the cluster membership.
     def addServer(self, serverId):
-        # with lock():
         oldServerList = list(kvsServers.keys())
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
         responses = []
@@ -260,9 +238,9 @@ class FrontendRPCServer:
 
                 except Exception as e:
                     pass
-                    # if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=5):
-                    #     # print("Server %d timeout on get and no heartbeat in the past 5 seconds. Removing." % serverId)
-                    #     response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 5 seconds. Removing."
+                    # if datetime.now() - serverTimestamps[sID] >= datetime.timedelta(seconds=0.1):
+                    #     # print("Server %d timeout on get and no heartbeat in the past 0.1 seconds. Removing." % serverId)
+                    #     response = "Server "+str(sID)+" timeout on get and no heartbeat in the past 0.1 seconds. Removing."
                     #     kvsServers.pop(sID)
         
         return str(kvsServers.keys()) + " " + str(responses)
