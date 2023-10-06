@@ -145,7 +145,7 @@ class FrontendRPCServer:
         shuffle(serverList)
         response = str(key) + ":ERR_KEY"
 
-        if key not in keyMonitors.key():
+        if key not in keyMonitors.keys():
             return response
 
         # beginRead
