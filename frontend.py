@@ -146,8 +146,8 @@ class FrontendRPCServer:
 
     # read
     def get(self, key):
-        serverList = list(kvsServers.keys())
-        shuffle(serverList)
+        # serverList = list(kvsServers.keys())
+        # shuffle(serverList)
         response = str(key) + ":ERR_KEY"
 
         if key not in keyMonitors.keys():
@@ -162,7 +162,8 @@ class FrontendRPCServer:
             keyMonitor.waitingReaders -= 1
             keyMonitor.readers += 1
 
-        for serverId in serverList:
+        while(kvsServers):
+            serverId = random.choice(list(kvsServers.keys()))
             try:
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 response = proxy.get(key)
