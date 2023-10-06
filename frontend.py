@@ -12,7 +12,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 lockedKeys = set()
 keyMonitors = dict() # maps key to RWMonitor
 log = [] # tuple of (writeId, key, value)
-# timestampLock = Lock()
 serverTimestamps = dict()
 kvsServers = dict()
 baseAddr = "http://localhost:"
@@ -53,7 +52,6 @@ class FrontendRPCServer:
 
         def sendPut(serverId, key, value, writeId):
             try:
-                # lockedKeys.add(key)
                 proxy = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 response = proxy.put(key, value, writeId)
                 if response == "On it, boss":
@@ -64,7 +62,6 @@ class FrontendRPCServer:
                 # declare dead
                 raise Exception(serverId, e, "Timeout on put.")
             return (serverId, response)
-        # serverId = key % len(kvsServers)
 
         def sendLog(serverId):
             try:
@@ -74,11 +71,9 @@ class FrontendRPCServer:
                 if response == "You got it, boss":
                     serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
-                # raise Exception(serverId, e, "Frontend failed on log send.")
                 response = "Frontend failed on log send."
             except Exception as e:
                 # declare dead
-                # raise Exception(serverId, e, "Timeout on log send.")
                 response = "Timeout on log send."
             return (serverId, response)
 
