@@ -14,7 +14,7 @@ class ClientRPCServer:
     def get(self, key):
         return frontend.get(key)
 
-    def hearbeat(self):
+    def heartbeat(self):
         return frontend.heartbeat()
 
 if __name__ == '__main__':

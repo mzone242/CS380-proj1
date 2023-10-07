@@ -47,6 +47,10 @@ class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
 
 class FrontendRPCServer:
 
+    def __init__(self):
+        self.t = Thread(target=self.heartbeat)
+        self.t.start()
+
     # full write
     def put(self, key, value):
         global writeId
@@ -201,22 +205,22 @@ class FrontendRPCServer:
                 response = "Timeout on heartbeat."
             return (serverId, response)
 
-        # while True:
-        results = dict()
-        with ThreadPoolExecutor() as executor:
-            commands = {executor.submit(sendHeartbeat, serverId) for serverId, _ in kvsServers.items()}
-            for future in as_completed(commands):
-                serverId, response = future.result()
-                results[serverId] = response
+        while True:
+            results = dict()
+            with ThreadPoolExecutor() as executor:
+                commands = {executor.submit(sendHeartbeat, serverId) for serverId, _ in kvsServers.items()}
+                for future in as_completed(commands):
+                    serverId, response = future.result()
+                    results[serverId] = response
 
-        for serverId, response in results.items():
-            if response == "Frontend failed on heartbeat.":
-                print(response + " Time to panic.")
-            elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
-                print(response + " No put/get response in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
-                results[serverId] = "No recorded response in the past 0.1 seconds. Removing server."
-                kvsServers.pop(serverId, None)
-        # sleep(0.05)
+            for serverId, response in results.items():
+                if response == "Frontend failed on heartbeat.":
+                    print(response + " Time to panic.")
+                elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
+                    print(response + " No put/get response in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
+                    results[serverId] = "No recorded response in the past 0.1 seconds. Removing server."
+                    kvsServers.pop(serverId, None)
+            sleep(0.05)
 
         # unreachable
         return "Results of this heartbeat: " + str(results) + " and current timestamps after this heartbeat: " + str(serverTimestamps)
@@ -235,6 +239,7 @@ class FrontendRPCServer:
         with writeIdLock:
             oldServerList = list(kvsServers.keys())
             responses = []
+            serverTimestamps[serverId] = datetime.now()
             if oldServerList:
                 shuffle(oldServerList)
                 proxy_new = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
@@ -248,14 +253,10 @@ class FrontendRPCServer:
                         if log:
                             responses.append(proxy_new.processLog(log))
                         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
-                        serverTimestamps[serverId] = datetime.now()
                         return str(responses)
 
                     except Exception as e:
                         pass
-            elif writeId == 0:
-                t = Thread(target=self.heartbeat)
-                t.start()
             
             kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
             return str(kvsServers.keys()) + " " + str(responses)
