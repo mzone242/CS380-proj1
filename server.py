@@ -28,7 +28,7 @@ class KVSRPCServer():
         if writeId == writeCtr + 1:
             kvStore[key] = value
             writeCtr += 1
-        elif writeID > writeCtr:
+        elif writeId > writeCtr:
             # need to alert frontend to send log
             return "No can do, boss"
         # don't redo stale write, but already committed so ack
