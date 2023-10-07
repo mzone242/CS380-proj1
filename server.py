@@ -28,46 +28,52 @@ class KVSRPCServer():
         if writeId == writeCtr + 1:
             kvStore[key] = value
             writeCtr += 1
-            return "On it, boss"
+            return "ACK"
         else:
             # need to alert frontend to send log
-            return "No can do, boss"
+            return "NACK"
 
+    # return in format k:v
     def get(self, key):
-        # return in format k:v
         return str(key) + ":" + str(kvStore.get(key, keyDNE))
 
+    # return in format k1:v1\nk2:v2\nk3:v3\n...
     def printKVPairs(self):
-        # return in format k1:v1\nk2:v2\nk3:v3\n...
         return "".join("{}:{}\n".format(k, v) for k, v in kvStore.items())[:-1]
 
+    # stops handle_request() loop in the init function so server can gracefully exit
     def shutdownServer(self):
         self.quit = True
         return "[Server " + str(serverId) + "] Shutting down"
 
+    # process write log from frontend
     def processLog(self, log):
         global writeCtr
+        # update log entries
         for _, k, v in log:
             kvStore[int(k)] = int(v)
-        # updating our writeID
+        # update our writeID
         writeCtr = log[-1][0]
-        return "You got it, boss"
+        return "ACK"
 
+    # used on server startup to update kvStore with that of another server
     def addKVPairs(self, kvPairs):
         if ":" in kvPairs:
             kvList = kvPairs.split()
             for pair in kvList:
                 k, v = pair.split(":")
                 kvStore[int(k)] = int(v)
-        return "Got the keys, boss"
+        return "ACK"
 
+    # sets writeCtr on server startup
     def updateWriteCtr(self, writeId):
         global writeCtr
         writeCtr = writeId
-        return "I've got it, boss"
+        return "ACK"
 
+    # heartbeat so frontend knows server is alive
     def heartbeat(self):
-        return "I'm here for you, boss"
+        return "Alive"
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = '''To be added.''')

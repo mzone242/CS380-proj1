@@ -48,6 +48,7 @@ class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
 class FrontendRPCServer:
 
     def __init__(self):
+        # start heartbeat
         self.t = Thread(target=self.heartbeat)
         self.t.start()
 
@@ -61,7 +62,7 @@ class FrontendRPCServer:
                 with kvsServers[serverId][1]:
                     proxy = kvsServers[serverId][0]
                     response = proxy.put(key, value, writeId)
-                    if response == "On it, boss":
+                    if response == "ACK":
                         serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
                 response = "Frontend failed on put."
@@ -76,7 +77,7 @@ class FrontendRPCServer:
                 with kvsServers[serverId][1]:
                     proxy = kvsServers[serverId][0]
                     response = proxy.processLog(log)
-                    if response == "You got it, boss":
+                    if response == "ACK":
                         serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
                 response = "Frontend failed on log send."
@@ -119,15 +120,15 @@ class FrontendRPCServer:
             # if timeout on put and no other response from that server in a while, it's dead
             for serverId, response in results.items():
                 if response == "Frontend failed on put.":
-                    print(response + " Time to panic.")
+                    # time to panic, unrecoverable if there's actually an issue
+                    pass
                 elif response == "Timeout on put." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.5):
-                    print(response + " No heartbeat in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")        
-                    results[serverId] = "Put timeout and no heartbeat; removing."  
+                    # no response in past 0.5 seconds, remove server
                     kvsServers.pop(serverId, None)
 
             # if any server NACKS, meaning they're missing puts: send log and wait for ACK/timeout
             with ThreadPoolExecutor() as executor:
-                commands = {executor.submit(sendLog, serverId) for serverId, response in results.items() if response == "No can do, boss"}
+                commands = {executor.submit(sendLog, serverId) for serverId, response in results.items() if response == "NACK"}
                 for future in as_completed(commands):
                     serverId, response = future.result()
                     results[serverId] = response
@@ -135,11 +136,10 @@ class FrontendRPCServer:
             # again, see if there's any timeouts on log send, and if so, remove
             for serverId, response in results.items():
                 if response == "Frontend failed on log send.":
-                    print(response + " Time to panic.")
-                    results[serverId] = "Frontend failed on log send; panicking."
+                    # time to panic, unrecoverable if there's actually an issue
+                    pass
                 elif response == "Timeout on log send." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.5):
-                    print(response + " No heartbeat in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
-                    results[serverId] = "Log timeout and no heartbeat; removing."   
+                    # no response in past 0.5 seconds, remove server
                     kvsServers.pop(serverId, None)
 
             # if all servers have responded to this put or timed out, then we're done.
@@ -184,8 +184,7 @@ class FrontendRPCServer:
                 break
             except Exception as e:
                 if datetime.now() - serverTimestamps[serverId] >= timedelta(seconds = 0.5):
-                    # print("Server %d timeout on get and no heartbeat in the past 0.1 seconds. Removing." % serverId)
-                    response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 0.1 seconds. Removing."
+                    # no response in past 0.5 seconds, remove server
                     kvsServers.pop(serverId, None)
 
         # endRead function in readers-writers
@@ -199,12 +198,14 @@ class FrontendRPCServer:
         
 
     def heartbeat(self):
+
+        # threaded function: each spawned thread will send a heartbeat to a server
         def sendHeartbeat(serverId):
             try:
                 with kvsServers[serverId][1]:
                     proxy = kvsServers[serverId][0]
                     response = proxy.heartbeat()
-                    if response == "I'm here for you, boss":
+                    if response == "Alive":
                         serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
                 response = "Frontend failed on heartbeat."
@@ -213,6 +214,7 @@ class FrontendRPCServer:
                 response = "Timeout on heartbeat."
             return (serverId, response)
 
+        # heartbeat every 0.05 seconds
         while True:
             results = dict()
             with ThreadPoolExecutor() as executor:
@@ -223,15 +225,13 @@ class FrontendRPCServer:
 
             for serverId, response in results.items():
                 if response == "Frontend failed on heartbeat.":
-                    print(response + " Time to panic.")
+                    # time to panic, unrecoverable if there's actually an issue
+                    pass
                 elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.5):
-                    print(response + " No put/get response in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
-                    results[serverId] = "No recorded response in the past 0.1 seconds. Removing server."
+                    # no response in past 0.5 seconds, remove server
                     kvsServers.pop(serverId, None)
             sleep(0.05)
-
         # unreachable
-        return "Results of this heartbeat: " + str(results) + " and current timestamps after this heartbeat: " + str(serverTimestamps)
 
 
     ## printKVPairs: This function routes requests to servers
@@ -247,29 +247,31 @@ class FrontendRPCServer:
     def addServer(self, serverId):
         with writeIdLogLock:
             oldServerList = list(kvsServers.keys())
-            responses = []
             serverTimestamps[serverId] = datetime.now()
+            # if only server, no data to update
             if oldServerList:
                 shuffle(oldServerList)
                 proxy_new = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 for server in oldServerList:
                     try:
+                        # update new server's kvStore from another server and current log entries
+                        # also update server's writeCtr
                         proxy_old = kvsServers[server][0]
                         with kvsServers[server][1]:
                             kvPairs = proxy_old.printKVPairs()
-                        responses.append(kvPairs)
-                        responses.append(proxy_new.addKVPairs(kvPairs))
-                        responses.append(proxy_new.updateWriteCtr(writeId))
+                        proxy_new.addKVPairs(kvPairs)
+                        proxy_new.updateWriteCtr(writeId)
                         if log:
-                            responses.append(proxy_new.processLog(log))
+                            proxy_new.processLog(log)
                         kvsServers[serverId] = (proxy_new, Lock())
-                        return str(responses)
+                        return "Success"
 
                     except Exception as e:
+                        # try next server, if the new server is the one failing we can't recover
                         pass
             
             kvsServers[serverId] = (TimeoutServerProxy(baseAddr + str(baseServerPort + serverId)), Lock())
-            return str(kvsServers.keys()) + " " + str(responses)
+            return "Success"
 
     ## listServer: This function prints out a list of servers that
     ## are currently active/alive inside the cluster.
