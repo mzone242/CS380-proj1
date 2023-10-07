@@ -215,6 +215,7 @@ class FrontendRPCServer:
                 elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=0.1):
                     print(response + " No put/get response in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
                     results[serverId] = "No recorded response in the past 0.1 seconds. Removing server."
+                    kvsServers.pop(serverId)
             sleep(0.05)
 
         # unreachable
