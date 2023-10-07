@@ -8,16 +8,15 @@ from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-lockedKeys = set()
-keyMonitors = dict() # maps key to RWMonitor
-keyMonitorLock = Lock()
-log = [] # tuple of (writeId, key, value)
-serverTimestamps = dict()
-kvsServers = dict()
+keyMonitors = dict()        # maps key:RWMonitor for every key in kvstore
+keyMonitorLock = Lock()     # protecting adding a RWMonitor to kvsServers
+serverTimestamps = dict()   # maps serverId:datetime of most recent response
+kvsServers = dict()         # maps serverId:(TimeoutServerProxy, proxyLock)
+writeId = 0                 # monotonically increasing with each new write
+log = []                    # tuple of (writeId, key, value)
+writeIdLogLock = Lock()     # used to protect incrementing writeId and modifying
 baseAddr = "http://localhost:"
 baseServerPort = 9000
-writeId = 0
-writeIdLock = Lock()
 
 class RWMonitor:
     def __init__(self):
@@ -25,6 +24,7 @@ class RWMonitor:
         self.writeCV = Condition()
         self.readers, self.writers, self.waitingReaders = 0, 0, 0
 
+# custom serverproxy with included timeout
 class TimeoutTransport(xmlrpc.client.Transport):
 
     def __init__(self, timeout, use_datetime=0):
@@ -55,6 +55,7 @@ class FrontendRPCServer:
     def put(self, key, value):
         global writeId
 
+        # threaded function: each spawned thread will send a put request to a server
         def sendPut(serverId, key, value, writeId):
             try:
                 with kvsServers[serverId][1]:
@@ -69,6 +70,7 @@ class FrontendRPCServer:
                 response =  "Timeout on put."
             return (serverId, response)
 
+        # threaded function: each spawned thread will send the FE's log to a server
         def sendLog(serverId):
             try:
                 with kvsServers[serverId][1]:
@@ -94,25 +96,27 @@ class FrontendRPCServer:
                 keyMonitors[key] = RWMonitor()
             keyMonitor = keyMonitors[key]
 
+        # entering critical section; first part of readers-writers
         with keyMonitor.writeCV:
             keyMonitor.writers += 1
             while keyMonitor.readers > 0:
                 keyMonitor.writeCV.wait()
-            # spawn one put thread per server, block til all servers ACK/timeout
-            # lock key and add to list of server : key
+
+            # increment writeId and add this put operation to log
             results = dict()
-            with writeIdLock:
+            with writeIdLogLock:
                 writeId += 1
                 thisWriteId, thisKey, thisValue = writeId, key, value
                 log.append((thisWriteId, thisKey, thisValue))
 
+            # spawn one put thread per server, wait til all servers ACK/NACK/timeout
             with ThreadPoolExecutor() as executor:
                 commands = {executor.submit(sendPut, serverId, key, value, writeId) for serverId, _ in kvsServers.items()}
                 for future in as_completed(commands):
                     serverId, response = future.result()
                     results[serverId] = response
 
-            # if timeout on put and heartbeat not recorded in a while, it's dead
+            # if timeout on put and no other response from that server in a while, it's dead
             for serverId, response in results.items():
                 if response == "Frontend failed on put.":
                     print(response + " Time to panic.")
@@ -121,7 +125,7 @@ class FrontendRPCServer:
                     results[serverId] = "Put timeout and no heartbeat; removing."  
                     kvsServers.pop(serverId, None)
 
-            # if any server says they have gaps: send log and wait for ACK
+            # if any server NACKS, meaning they're missing puts: send log and wait for ACK/timeout
             with ThreadPoolExecutor() as executor:
                 commands = {executor.submit(sendLog, serverId) for serverId, response in results.items() if response == "No can do, boss"}
                 for future in as_completed(commands):
@@ -138,10 +142,12 @@ class FrontendRPCServer:
                     results[serverId] = "Log timeout and no heartbeat; removing."   
                     kvsServers.pop(serverId, None)
 
-
-            with writeIdLock:
+            # if all servers have responded to this put or timed out, then we're done.
+            # remove write from log and commence wrap-up
+            with writeIdLogLock:
                 log.remove((thisWriteId, thisKey, thisValue))
 
+            # ending portion of readers-writers, for writers
             keyMonitor.writers -= 1
             if keyMonitor.waitingReaders == 0:
                 keyMonitor.writeCV.notify()
@@ -158,7 +164,7 @@ class FrontendRPCServer:
         if key not in keyMonitors.keys():
             return response
 
-        # beginRead
+        # beginRead function in readers-writers
         keyMonitor = keyMonitors[key]
         with keyMonitor.readCV:
             keyMonitor.waitingReaders += 1
@@ -167,6 +173,7 @@ class FrontendRPCServer:
             keyMonitor.waitingReaders -= 1
             keyMonitor.readers += 1
 
+        # find a random server to send get() request to
         while(kvsServers):
             serverId = choice(list(kvsServers.keys()))
             # serverId = 0
@@ -181,7 +188,7 @@ class FrontendRPCServer:
                     response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 0.1 seconds. Removing."
                     kvsServers.pop(serverId, None)
 
-        # endRead
+        # endRead function in readers-writers
         with keyMonitor.readCV:
             keyMonitor.readers -= 1
             if keyMonitor.readers == 0 and keyMonitor.writers > 0:
@@ -238,7 +245,7 @@ class FrontendRPCServer:
     ## addServer: This function registers a new server with the
     ## serverId to the cluster membership.
     def addServer(self, serverId):
-        with writeIdLock:
+        with writeIdLogLock:
             oldServerList = list(kvsServers.keys())
             responses = []
             serverTimestamps[serverId] = datetime.now()
