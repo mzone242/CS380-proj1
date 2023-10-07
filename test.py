@@ -24,17 +24,17 @@ def read(client, reads):
 
 
 client1 = Client(0)
-print(client1.heartbeat())
-# for i in range(0, 100):
-#     print(client1.put(i, i))
+# print(client1.heartbeat())
+for i in range(0, 100):
+    print(client1.put(i, i))
 
-# # Start all threads. 
-# threads = []
-# for n in range(3):
-#     t = Thread(target=read, args=(Client(n), 500,))
-#     t.start()
-#     threads.append(t)
+# Start all threads. 
+threads = []
+for n in range(3):
+    t = Thread(target=read, args=(Client(n), 500,))
+    t.start()
+    threads.append(t)
 
-# # Wait all threads to finish.
-# for t in threads:
-#     t.join()
+# Wait all threads to finish.
+for t in threads:
+    t.join()

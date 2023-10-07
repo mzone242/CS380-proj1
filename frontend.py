@@ -38,7 +38,7 @@ class TimeoutTransport(xmlrpc.client.Transport):
 
 class TimeoutServerProxy(xmlrpc.client.ServerProxy):
 
-    def __init__(self, uri, timeout=1, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
+    def __init__(self, uri, timeout=0.1, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
         t = TimeoutTransport(timeout)
         xmlrpc.client.ServerProxy.__init__(self, uri, t, encoding, verbose, allow_none, use_datetime)
 
@@ -57,10 +57,11 @@ class FrontendRPCServer:
 
         def sendPut(serverId, key, value, writeId):
             try:
-                proxy = kvsServers[serverId]
-                response = proxy.put(key, value, writeId)
-                if response == "On it, boss":
-                    serverTimestamps[serverId] = datetime.now()
+                with kvsServers[serverId][1]:
+                    proxy = kvsServers[serverId][0]
+                    response = proxy.put(key, value, writeId)
+                    if response == "On it, boss":
+                        serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
                 response = "Frontend failed on put."
             except Exception as e:
@@ -70,11 +71,11 @@ class FrontendRPCServer:
 
         def sendLog(serverId):
             try:
-                proxy = kvsServers[serverId]
-                # TODO: add this function to server
-                response = proxy.processLog(log)
-                if response == "You got it, boss":
-                    serverTimestamps[serverId] = datetime.now()
+                with kvsServers[serverId][1]:
+                    proxy = kvsServers[serverId][0]
+                    response = proxy.processLog(log)
+                    if response == "You got it, boss":
+                        serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
                 response = "Frontend failed on log send."
             except Exception as e:
@@ -170,8 +171,9 @@ class FrontendRPCServer:
             serverId = choice(list(kvsServers.keys()))
             # serverId = 0
             try:
-                proxy = kvsServers[serverId]
-                response = proxy.get(key)
+                with kvsServers[serverId][1]:
+                    proxy = kvsServers[serverId][0]
+                    response = proxy.get(key)
                 break
             except Exception as e:
                 if datetime.now() - serverTimestamps[serverId] >= timedelta(seconds = 0.1):
@@ -192,10 +194,11 @@ class FrontendRPCServer:
     def heartbeat(self):
         def sendHeartbeat(serverId):
             try:
-                proxy = kvsServers[serverId]
-                response = proxy.heartbeat()
-                if response == "I'm here for you, boss":
-                    serverTimestamps[serverId] = datetime.now()
+                with kvsServers[serverId][1]:
+                    proxy = kvsServers[serverId][0]
+                    response = proxy.heartbeat()
+                    if response == "I'm here for you, boss":
+                        serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
                 response = "Frontend failed on heartbeat."
             except Exception as e:
@@ -229,7 +232,8 @@ class FrontendRPCServer:
     def printKVPairs(self, serverId):
         if serverId not in kvsServers:
             return "ERR_NOEXIST"
-        return kvsServers[serverId].printKVPairs()
+        with kvsServers[serverId][1]: 
+            return kvsServers[serverId][0].printKVPairs()
 
     ## addServer: This function registers a new server with the
     ## serverId to the cluster membership.
@@ -243,20 +247,21 @@ class FrontendRPCServer:
                 proxy_new = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
                 for server in oldServerList:
                     try:
-                        proxy_old = kvsServers[server]
-                        kvPairs = proxy_old.printKVPairs()
+                        proxy_old = kvsServers[server][0]
+                        with kvsServers[server][1]:
+                            kvPairs = proxy_old.printKVPairs()
                         responses.append(kvPairs)
                         responses.append(proxy_new.addKVPairs(kvPairs))
                         responses.append(proxy_new.updateWriteCtr(writeId))
                         if log:
                             responses.append(proxy_new.processLog(log))
-                        kvsServers[serverId] = proxy_new
+                        kvsServers[serverId] = (proxy_new, Lock())
                         return str(responses)
 
                     except Exception as e:
                         pass
             
-            kvsServers[serverId] = TimeoutServerProxy(baseAddr + str(baseServerPort + serverId))
+            kvsServers[serverId] = (TimeoutServerProxy(baseAddr + str(baseServerPort + serverId)), Lock())
             return str(kvsServers.keys()) + " " + str(responses)
 
     ## listServer: This function prints out a list of servers that
@@ -273,7 +278,8 @@ class FrontendRPCServer:
     def shutdownServer(self, serverId):
         if serverId not in kvsServers:
             return "ERR_NOEXIST"
-        result = kvsServers[serverId].shutdownServer()
+        with kvsServers[serverId][1]:
+            result = kvsServers[serverId][0].shutdownServer()
         kvsServers.pop(serverId, None)
         return result
 
