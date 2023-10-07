@@ -38,7 +38,7 @@ class TimeoutTransport(xmlrpc.client.Transport):
 
 class TimeoutServerProxy(xmlrpc.client.ServerProxy):
 
-    def __init__(self, uri, timeout=0.1, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
+    def __init__(self, uri, timeout=1, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
         t = TimeoutTransport(timeout)
         xmlrpc.client.ServerProxy.__init__(self, uri, t, encoding, verbose, allow_none, use_datetime)
 
