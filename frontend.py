@@ -1,5 +1,5 @@
 from threading import Condition, Lock, RLock, Thread
-from datetime import datetime
+from datetime import datetime, timedelta
 from random import shuffle, choice
 from time import sleep
 import xmlrpc.client
@@ -111,10 +111,10 @@ class FrontendRPCServer:
             for serverId, response in results.items():
                 if response == "Frontend failed on put.":
                     print(response + " Time to panic.")
-                elif response == "Timeout on put." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=0.1):
+                elif response == "Timeout on put." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
                     print(response + " No heartbeat in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")        
                     results[serverId] = "Put timeout and no heartbeat; removing."  
-                    kvsServers.pop(serverId)
+                    kvsServers.pop(serverId, None)
 
             # if any server says they have gaps: send log and wait for ACK
             with ThreadPoolExecutor() as executor:
@@ -128,10 +128,10 @@ class FrontendRPCServer:
                 if response == "Frontend failed on log send.":
                     print(response + " Time to panic.")
                     results[serverId] = "Frontend failed on log send; panicking."
-                elif response == "Timeout on log send." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=0.1):
+                elif response == "Timeout on log send." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
                     print(response + " No heartbeat in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
                     results[serverId] = "Log timeout and no heartbeat; removing."   
-                    kvsServers.pop(serverId)
+                    kvsServers.pop(serverId, None)
 
 
             with writeIdLock:
@@ -172,10 +172,10 @@ class FrontendRPCServer:
                 response = proxy.get(key)
                 break
             except Exception as e:
-                if datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds = 0.1):
+                if datetime.now() - serverTimestamps[serverId] >= timedelta(seconds = 0.1):
                     # print("Server %d timeout on get and no heartbeat in the past 0.1 seconds. Removing." % serverId)
                     response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 0.1 seconds. Removing."
-                    kvsServers.pop(serverId)
+                    kvsServers.pop(serverId, None)
 
         # endRead
         with keyMonitor.readCV:
@@ -212,10 +212,10 @@ class FrontendRPCServer:
             for serverId, response in results.items():
                 if response == "Frontend failed on heartbeat.":
                     print(response + " Time to panic.")
-                elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= datetime.timedelta(seconds=0.1):
+                elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
                     print(response + " No put/get response in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
                     results[serverId] = "No recorded response in the past 0.1 seconds. Removing server."
-                    kvsServers.pop(serverId)
+                    kvsServers.pop(serverId, None)
             sleep(0.05)
 
         # unreachable
@@ -275,7 +275,7 @@ class FrontendRPCServer:
         if serverId not in kvsServers:
             return "ERR_NOEXIST"
         result = kvsServers[serverId].shutdownServer()
-        kvsServers.pop(serverId)
+        kvsServers.pop(serverId, None)
         return result
 
 server = SimpleThreadedXMLRPCServer(("localhost", 8001))
