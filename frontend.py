@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 lockedKeys = set()
 keyMonitors = dict() # maps key to RWMonitor
+keyMonitorLock = Lock()
 log = [] # tuple of (writeId, key, value)
 serverTimestamps = dict()
 kvsServers = dict()
@@ -83,9 +84,10 @@ class FrontendRPCServer:
             return "ERR_NOSERVERS"
        
         # check if this key is new: if so, create monitor for it
-        if key not in keyMonitors.keys():
-            keyMonitors[key] = RWMonitor()
-        keyMonitor = keyMonitors[key]
+        with keyMonitorLock:
+            if key not in keyMonitors.keys():
+                keyMonitors[key] = RWMonitor()
+            keyMonitor = keyMonitors[key]
 
         with keyMonitor.writeCV:
             keyMonitor.writers += 1

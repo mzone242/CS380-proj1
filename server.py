@@ -28,11 +28,10 @@ class KVSRPCServer():
         if writeId == writeCtr + 1:
             kvStore[key] = value
             writeCtr += 1
-        elif writeId > writeCtr:
+            return "On it, boss"
+        else:
             # need to alert frontend to send log
             return "No can do, boss"
-        # don't redo stale write, but already committed so ack
-        return "On it, boss"
 
     def get(self, key):
         # return in format k:v
