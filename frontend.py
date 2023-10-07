@@ -160,13 +160,13 @@ class FrontendRPCServer:
             return response
 
         # beginRead
-        keyMonitor = keyMonitors[key]
-        with keyMonitor.readCV:
-            keyMonitor.waitingReaders += 1
-            if keyMonitor.writers > 0:
-                keyMonitor.readCV.wait()
-            keyMonitor.waitingReaders -= 1
-            keyMonitor.readers += 1
+        # keyMonitor = keyMonitors[key]
+        # with keyMonitor.readCV:
+        #     keyMonitor.waitingReaders += 1
+        #     if keyMonitor.writers > 0:
+        #         keyMonitor.readCV.wait()
+        #     keyMonitor.waitingReaders -= 1
+        #     keyMonitor.readers += 1
 
         while(kvsServers):
             serverId = choice(list(kvsServers.keys()))
@@ -182,11 +182,11 @@ class FrontendRPCServer:
                     kvsServers.pop(serverId, None)
 
         # endRead
-        with keyMonitor.readCV:
-            keyMonitor.readers -= 1
-            if keyMonitor.readers == 0 and keyMonitor.writers > 0:
-                with keyMonitor.writeCV:
-                    keyMonitor.writeCV.notify()
+        # with keyMonitor.readCV:
+        #     keyMonitor.readers -= 1
+        #     if keyMonitor.readers == 0 and keyMonitor.writers > 0:
+        #         with keyMonitor.writeCV:
+        #             keyMonitor.writeCV.notify()
 
         return response
         
