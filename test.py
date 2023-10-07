@@ -15,6 +15,9 @@ class Client:
     def get(self, key):
         return self.client.get(key)
 
+    def heartbeat(self):
+        return self.client.get()
+
 def read(client, reads):
     for _ in range(0, reads):
         print(client.get(randint(0, 100)))

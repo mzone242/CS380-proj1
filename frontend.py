@@ -201,22 +201,22 @@ class FrontendRPCServer:
                 response = "Timeout on heartbeat."
             return (serverId, response)
 
-        while True:
-            results = dict()
-            with ThreadPoolExecutor() as executor:
-                commands = {executor.submit(sendHeartbeat, serverId) for serverId, _ in kvsServers.items()}
-                for future in as_completed(commands):
-                    serverId, response = future.result()
-                    results[serverId] = response
+        # while True:
+        results = dict()
+        with ThreadPoolExecutor() as executor:
+            commands = {executor.submit(sendHeartbeat, serverId) for serverId, _ in kvsServers.items()}
+            for future in as_completed(commands):
+                serverId, response = future.result()
+                results[serverId] = response
 
-            for serverId, response in results.items():
-                if response == "Frontend failed on heartbeat.":
-                    print(response + " Time to panic.")
-                elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
-                    print(response + " No put/get response in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
-                    results[serverId] = "No recorded response in the past 0.1 seconds. Removing server."
-                    kvsServers.pop(serverId, None)
-            sleep(0.05)
+        for serverId, response in results.items():
+            if response == "Frontend failed on heartbeat.":
+                print(response + " Time to panic.")
+            elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
+                print(response + " No put/get response in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
+                results[serverId] = "No recorded response in the past 0.1 seconds. Removing server."
+                kvsServers.pop(serverId, None)
+        # sleep(0.05)
 
         # unreachable
         return "Results of this heartbeat: " + str(results) + " and current timestamps after this heartbeat: " + str(serverTimestamps)
