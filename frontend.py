@@ -2,10 +2,12 @@ import xmlrpc.client
 import xmlrpc.server
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
+from threading import Lock
 
 kvsServers = dict()
 baseAddr = "http://localhost:"
 baseServerPort = 9000
+serverLocks = {}
 
 class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
         pass
@@ -18,14 +20,16 @@ class FrontendRPCServer:
     ## pair or updating an existing one.
     def put(self, key, value):
         serverId = key % len(kvsServers)
-        return kvsServers[serverId].put(key, value)
+        with serverLocks[serverId]:
+            return kvsServers[serverId].put(key, value)
 
     ## get: This function routes requests from clients to proper
     ## servers that are responsible for getting the value
     ## associated with the given key.
     def get(self, key):
         serverId = key % len(kvsServers)
-        return kvsServers[serverId].get(key)
+        with serverLocks[serverId]:
+            return kvsServers[serverId].get(key)
 
     ## printKVPairs: This function routes requests to servers
     ## matched with the given serverIds.
@@ -36,6 +40,7 @@ class FrontendRPCServer:
     ## serverId to the cluster membership.
     def addServer(self, serverId):
         kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
+        serverLocks[serverId] = Lock()
         return "Success"
 
     ## listServer: This function prints out a list of servers that
