@@ -47,10 +47,6 @@ class SimpleThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
 
 class FrontendRPCServer:
 
-    def __init__(self):
-        t = Thread(target=self.heartbeat)
-        t.start()
-
     # full write
     def put(self, key, value):
         global writeId
@@ -62,10 +58,10 @@ class FrontendRPCServer:
                 if response == "On it, boss":
                     serverTimestamps[serverId] = datetime.now()
             except xmlrpc.client.Fault as e:
-                raise Exception(serverId, e, "Frontend failed on put.")
+                response = "Frontend failed on put."
             except Exception as e:
                 # declare dead
-                raise Exception(serverId, e, "Timeout on put.")
+                response =  "Timeout on put."
             return (serverId, response)
 
         def sendLog(serverId):
@@ -256,6 +252,9 @@ class FrontendRPCServer:
 
                     except Exception as e:
                         pass
+            elif writeId == 0:
+                t = Thread(target=self.heartbeat)
+                t.start()
             
             kvsServers[serverId] = xmlrpc.client.ServerProxy(baseAddr + str(baseServerPort + serverId))
             return str(kvsServers.keys()) + " " + str(responses)
@@ -263,10 +262,6 @@ class FrontendRPCServer:
     ## listServer: This function prints out a list of servers that
     ## are currently active/alive inside the cluster.
     def listServer(self):
-        # serverList = []
-        # for serverId, rpcHandle in kvsServers.items():
-        #     serverList.append(serverId)
-        # st = str(serverList)[1:-1]
         serverList = list(kvsServers.keys())
         if len(serverList): 
             return str(serverList)[1:-1]
