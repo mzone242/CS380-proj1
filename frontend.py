@@ -38,7 +38,7 @@ class TimeoutTransport(xmlrpc.client.Transport):
 
 class TimeoutServerProxy(xmlrpc.client.ServerProxy):
 
-    def __init__(self, uri, timeout=0.1, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
+    def __init__(self, uri, timeout=1, transport=None, encoding=None, verbose=0, allow_none=0, use_datetime=0):
         t = TimeoutTransport(timeout)
         xmlrpc.client.ServerProxy.__init__(self, uri, t, encoding, verbose, allow_none, use_datetime)
 
@@ -116,7 +116,7 @@ class FrontendRPCServer:
             for serverId, response in results.items():
                 if response == "Frontend failed on put.":
                     print(response + " Time to panic.")
-                elif response == "Timeout on put." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
+                elif response == "Timeout on put." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=1):
                     print(response + " No heartbeat in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")        
                     results[serverId] = "Put timeout and no heartbeat; removing."  
                     kvsServers.pop(serverId, None)
@@ -133,7 +133,7 @@ class FrontendRPCServer:
                 if response == "Frontend failed on log send.":
                     print(response + " Time to panic.")
                     results[serverId] = "Frontend failed on log send; panicking."
-                elif response == "Timeout on log send." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
+                elif response == "Timeout on log send." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=1):
                     print(response + " No heartbeat in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
                     results[serverId] = "Log timeout and no heartbeat; removing."   
                     kvsServers.pop(serverId, None)
@@ -176,7 +176,7 @@ class FrontendRPCServer:
                     response = proxy.get(key)
                 break
             except Exception as e:
-                if datetime.now() - serverTimestamps[serverId] >= timedelta(seconds = 0.1):
+                if datetime.now() - serverTimestamps[serverId] >= timedelta(seconds = 1):
                     # print("Server %d timeout on get and no heartbeat in the past 0.1 seconds. Removing." % serverId)
                     response = "Server "+str(serverId)+" timeout on get and no heartbeat in the past 0.1 seconds. Removing."
                     kvsServers.pop(serverId, None)
@@ -217,7 +217,7 @@ class FrontendRPCServer:
             for serverId, response in results.items():
                 if response == "Frontend failed on heartbeat.":
                     print(response + " Time to panic.")
-                elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=0.1):
+                elif response == "Timeout on heartbeat." and datetime.now() - serverTimestamps[serverId] >= timedelta(seconds=1):
                     print(response + " No put/get response in the past 0.1 seconds. Removing serverId "+str(serverId)+" from list.")
                     results[serverId] = "No recorded response in the past 0.1 seconds. Removing server."
                     kvsServers.pop(serverId, None)
