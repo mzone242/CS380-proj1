@@ -161,7 +161,7 @@ class FrontendRPCServer:
 
     # read
     def get(self, key):
-        response = str(key) + ":ERR_KEY"
+        response = "ERR_KEY"
 
         if key not in keyMonitors.keys():
             return response
@@ -201,7 +201,6 @@ class FrontendRPCServer:
         
 
     def heartbeat(self):
-
         # threaded function: each spawned thread will send a heartbeat to a server
         def sendHeartbeat(serverId):
             try:

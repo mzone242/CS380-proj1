@@ -7,7 +7,6 @@ serverId = 0
 basePort = 9000
 
 kvStore = dict()
-keyDNE = "ERR_KEY"
 writeCtr = 0 # most recent writeId that we've seen; used to check for gaps
 
 class KVSRPCServer():
@@ -35,7 +34,9 @@ class KVSRPCServer():
 
     # return in format k:v
     def get(self, key):
-        return str(key) + ":" + str(kvStore.get(key, keyDNE))
+        if key in kvStore:
+            return str(key) + ":" + str(kvStore.get(key))
+        return "ERR_KEY"
 
     # return in format k1:v1\nk2:v2\nk3:v3\n...
     def printKVPairs(self):
