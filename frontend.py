@@ -184,7 +184,7 @@ class FrontendRPCServer:
                 if lock:
                     with lock:
                         response = proxy.get(key)
-                break
+                        break
             except Exception as e:
                 if datetime.now() - serverTimestamps[serverId] >= timedelta(seconds = 0.5):
                     # no response in past 0.5 seconds, remove server
