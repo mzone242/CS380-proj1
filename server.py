@@ -39,7 +39,7 @@ class KVSRPCServer():
 
     # return in format k1:v1\nk2:v2\nk3:v3\n...
     def printKVPairs(self):
-        return "".join("{}:{}\n".format(k, v) for k, v in kvStore.items())[:-1]
+        return "".join("{}:{}\n".format(k, v) for k, v in kvStore.items())
 
     # stops handle_request() loop in the init function so server can gracefully exit
     def shutdownServer(self):

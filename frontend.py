@@ -155,7 +155,7 @@ class FrontendRPCServer:
                 with keyMonitor.readCV:
                     keyMonitor.readCV.notify_all()
 
-        return str(results)
+        return "Success"
 
     # read
     def get(self, key):
@@ -237,10 +237,16 @@ class FrontendRPCServer:
     ## printKVPairs: This function routes requests to servers
     ## matched with the given serverIds.
     def printKVPairs(self, serverId):
-        if serverId not in kvsServers:
-            return "ERR_NOEXIST"
-        with kvsServers[serverId][1]: 
-            return kvsServers[serverId][0].printKVPairs()
+        response = "ERR_NOEXIST"
+        try:
+            with kvsServers[serverId][1]: 
+                proxy =  kvsServers[serverId][0]
+                response = proxy.printKVPairs()
+        except Exception as e:
+            if datetime.now() - serverTimestamps[serverId] >= timedelta(seconds = 0.5):
+                # no response in past 0.5 seconds, remove server
+                kvsServers.pop(serverId, None)
+        return response
 
     ## addServer: This function registers a new server with the
     ## serverId to the cluster membership.
