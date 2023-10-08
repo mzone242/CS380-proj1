@@ -95,7 +95,7 @@ class FrontendRPCServer:
        
         # check if this key is new: if so, create monitor for it
         with keyMonitorLock:
-            if key not in keyMonitors.keys():
+            if key not in keyMonitors:
                 keyMonitors[key] = RWMonitor()
             keyMonitor = keyMonitors[key]
 
@@ -163,7 +163,7 @@ class FrontendRPCServer:
     def get(self, key):
         response = "ERR_KEY"
 
-        if key not in keyMonitors.keys():
+        if key not in keyMonitors:
             return response
 
         # beginRead function in readers-writers
