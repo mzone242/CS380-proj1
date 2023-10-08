@@ -69,6 +69,9 @@ class FrontendRPCServer:
             except Exception as e:
                 # declare dead
                 response =  "Timeout on put."
+            except KeyError:
+                # server died prior to rpc call
+                response = "Server dead."
             return (serverId, response)
 
         # threaded function: each spawned thread will send the FE's log to a server
@@ -84,6 +87,9 @@ class FrontendRPCServer:
             except Exception as e:
                 # declare dead
                 response = "Timeout on log send."
+            except KeyError:
+                # server died prior to rpc call
+                response = "Server dead."
             return (serverId, response)
 
         
@@ -186,6 +192,9 @@ class FrontendRPCServer:
                 if datetime.now() - serverTimestamps[serverId] >= timedelta(seconds = 0.5):
                     # no response in past 0.5 seconds, remove server
                     kvsServers.pop(serverId, None)
+            except KeyError:
+                # server died prior to rpc call
+                pass
 
         # endRead function in readers-writers
         with keyMonitor.readCV:
@@ -212,6 +221,9 @@ class FrontendRPCServer:
             except Exception as e:
                 # declare dead
                 response = "Timeout on heartbeat."
+            except KeyError:
+                # server died prior to rpc call
+                response = "Server dead."
             return (serverId, response)
 
         # heartbeat every 0.05 seconds
@@ -240,12 +252,15 @@ class FrontendRPCServer:
         response = "ERR_NOEXIST"
         try:
             with kvsServers[serverId][1]: 
-                proxy =  kvsServers[serverId][0]
+                proxy = kvsServers[serverId][0]
                 response = proxy.printKVPairs()
         except Exception as e:
             if datetime.now() - serverTimestamps[serverId] >= timedelta(seconds = 0.5):
                 # no response in past 0.5 seconds, remove server
                 kvsServers.pop(serverId, None)
+        except KeyError:
+            # server died
+            pass
         return response
 
     ## addServer: This function registers a new server with the
@@ -275,6 +290,9 @@ class FrontendRPCServer:
                     except Exception as e:
                         # try next server, if the new server is the one failing we can't recover
                         pass
+                    except KeyError:
+                        # server died prior to rpc call
+                        pass
             
             kvsServers[serverId] = (TimeoutServerProxy(baseAddr + str(baseServerPort + serverId)), Lock())
             return "Success"
@@ -293,9 +311,13 @@ class FrontendRPCServer:
     def shutdownServer(self, serverId):
         if serverId not in kvsServers:
             return "ERR_NOEXIST"
-        with kvsServers[serverId][1]:
-            result = kvsServers[serverId][0].shutdownServer()
-        kvsServers.pop(serverId, None)
+        try:
+            with kvsServers[serverId][1]:
+                result = kvsServers[serverId][0].shutdownServer()
+            kvsServers.pop(serverId, None)
+        except KeyError:
+            # server died prior to rpc call
+            pass
         return result
 
 server = SimpleThreadedXMLRPCServer(("localhost", 8001))
